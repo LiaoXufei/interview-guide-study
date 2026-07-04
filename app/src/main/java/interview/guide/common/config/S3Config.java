@@ -33,7 +33,7 @@ public class S3Config {
             .credentialsProvider(StaticCredentialsProvider.create(credentials))
             .overrideConfiguration(clientOverrideConfiguration())
             // 使用路径风格访问，避免 SDK 使用 bucket.endpoint 导致 DNS 解析失败。
-            .forcePathStyle(true)
+            .forcePathStyle(true)// 关键配置：使用路径风格访问
             .build();
     }
 

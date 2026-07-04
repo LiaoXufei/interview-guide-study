@@ -83,16 +83,17 @@ spring:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 1024  # text-embedding-v3实际生成的向量维度
+        dimensions: 2048  # text-embedding-v3实际生成的向量维度
         initialize-schema: true # 开发环境设置为 true，方便快速启动。生产环境设置为 false，手动管理数据库 schema，避免意外变更。
         remove-existing-vector-store-table: false  # 保留现有表和数据
 
 # Application custom configuration
 app:
   ai:
-    default-provider: dashscope
-    default-embedding-provider: dashscope
-    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
+    # 使用openrouter作为embedding和chat功能的提供商
+    default-provider: openrouter  #默认提供商为dashscope
+    default-embedding-provider: openrouter  #默认嵌入提供商为dashscope
+    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:2048}  #由于openrouter模型embedding维度为2048
     security:
       api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}
       require-encryption-key: ${APP_AI_CONFIG_REQUIRE_ENCRYPTION_KEY:true}
@@ -104,6 +105,15 @@ app:
     agent-utils:
       skills-root: ${APP_AI_AGENT_UTILS_SKILLS_ROOT:classpath:skills}
     providers:
+      # 新增供应商openrouter
+      openrouter:
+        base-url: https://openrouter.ai/api/v1
+        api-key: ${PROVIDER_OPENROUTER_API_KEY:}
+        model: ${PROVIDER_OPENROUTER_CHAT_MODEL:google/gemma-2-9b-it:free}
+        embedding-model: nvidia/llama-nemotron-embed-vl-1b-v2:free
+        embedding-dimensions: 2048  # 该免费模型的embedding维度为2048
+        supports-embedding: true
+        temperature: 0.7
       dashscope:
         base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
         api-key: ${AI_BAILIAN_API_KEY}

@@ -49,6 +49,7 @@ dependencies {
     implementation libs.tika.parsers
 
     // AWS S3 SDK for RustFS storage
+    //注意：使用 AWS SDK v2 而非 v1，v2 是完全重写的异步优先版本，性能更好，API 设计更现代。
     implementation "software.amazon.awssdk:s3:${libs.versions.aws.sdk.get()}"
 
     // Pinyin4j - 汉字转拼音

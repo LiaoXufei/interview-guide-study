@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 @Data
 @Component
 @ConfigurationProperties(prefix = "app.storage")
+//Spring Boot 在启动时，把 Environment 里的属性按 prefix 映射到 Java 对象的字段，并做类型转换
+//作用：把 app.storage.* 转成强类型的 StorageConfigProperties，供 S3 客户端和文件服务使用。
 public class StorageConfigProperties {
 
     private String endpoint;

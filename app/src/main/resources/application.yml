@@ -42,7 +42,7 @@ spring:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:interview_guide}
     username: ${POSTGRES_USER:postgres}
     # 与根目录 docker-compose.yml 中 postgres 服务默认一致（本地只起依赖容器 + bootRun 时无需改）
-    password: ${POSTGRES_PASSWORD:password}
+    password: ${POSTGRES_PASSWORD:123456}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -83,7 +83,7 @@ spring:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 2048  # text-embedding-v3实际生成的向量维度
+        dimensions: 1024  # text-embedding-v3实际生成的向量维度
         initialize-schema: true # 开发环境设置为 true，方便快速启动。生产环境设置为 false，手动管理数据库 schema，避免意外变更。
         remove-existing-vector-store-table: false  # 保留现有表和数据
 
@@ -93,7 +93,7 @@ app:
     # 使用openrouter作为embedding和chat功能的提供商
     default-provider: openrouter  #默认提供商为dashscope
     default-embedding-provider: openrouter  #默认嵌入提供商为dashscope
-    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:2048}  #由于openrouter模型embedding维度为2048
+    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
     security:
       api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}
       require-encryption-key: ${APP_AI_CONFIG_REQUIRE_ENCRYPTION_KEY:true}
@@ -109,9 +109,9 @@ app:
       openrouter:
         base-url: https://openrouter.ai/api/v1
         api-key: ${PROVIDER_OPENROUTER_API_KEY:}
-        model: ${PROVIDER_OPENROUTER_CHAT_MODEL:google/gemma-2-9b-it:free}
+        model: ${PROVIDER_OPENROUTER_CHAT_MODEL:nvidia/nemotron-3-ultra-550b-a55b:free}
         embedding-model: nvidia/llama-nemotron-embed-vl-1b-v2:free
-        embedding-dimensions: 2048  # 该免费模型的embedding维度为2048
+        embedding-dimensions: 1024
         supports-embedding: true
         temperature: 0.7
       dashscope:

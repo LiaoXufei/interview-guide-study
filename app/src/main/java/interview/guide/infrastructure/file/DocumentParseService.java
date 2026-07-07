@@ -28,6 +28,7 @@ import java.io.InputStream;
 @Service
 public class DocumentParseService {
 
+    // 这里的 5 MB 是文本长度限制，不是文件大小
     private static final int MAX_TEXT_LENGTH = 5 * 1024 * 1024; // 5MB
 
     private final TextCleaningService textCleaningService;
@@ -53,6 +54,7 @@ public class DocumentParseService {
         }
 
         try (InputStream inputStream = file.getInputStream()) {
+            // 调用流处理方法
             String content = parseContent(inputStream);
             String cleanedContent = textCleaningService.cleanText(content);
             log.info("文件解析成功，提取文本长度: {} 字符", cleanedContent.length());
@@ -80,6 +82,7 @@ public class DocumentParseService {
         }
 
         try (InputStream inputStream = new ByteArrayInputStream(fileBytes)) {
+            // 调用流处理方法
             String content = parseContent(inputStream);
             String cleanedContent = textCleaningService.cleanText(content);
             log.info("文件解析成功，提取文本长度: {} 字符", cleanedContent.length());
@@ -110,6 +113,9 @@ public class DocumentParseService {
         AutoDetectParser parser = new AutoDetectParser();
 
         // 2. 创建内容处理器，只接收正文，限制最大长度为 5MB
+        // 解决大文件 OOM 问题
+        // BodyContentHandler 的构造参数是写缓冲区的最大字符数。
+        // 达到上限后 Tika 抛 SAXException，由上层捕获并转换为业务异常。
         BodyContentHandler handler = new BodyContentHandler(MAX_TEXT_LENGTH);
 
         // 3. 创建元数据对象
@@ -121,13 +127,16 @@ public class DocumentParseService {
         // 5. 显式指定 Parser 到 Context（增强健壮性）
         context.set(Parser.class, parser);
 
-        // 6. 禁用嵌入文档解析（关键：避免提取图片引用和临时文件路径）
+        // 6. 禁用嵌入文档解析（关键：避免提取图片引用和临时文件路径）s
+        // 解决问题 Word 图片引用 image1.jpeg
+        // 原理：NoOpEmbeddedDocumentExtractor 通过让 shouldParseEmbedded() 始终返回 false，告诉 Tika 跳过所有嵌入资源
+        // parseEmbedded() 永远不会被执行。
         context.set(EmbeddedDocumentExtractor.class, new NoOpEmbeddedDocumentExtractor());
 
         // 7. PDF 专用配置：关闭图片提取，按位置排序文本
         PDFParserConfig pdfConfig = new PDFParserConfig();
-        pdfConfig.setExtractInlineImages(false);
-        pdfConfig.setSortByPosition(true); // 按 x/y 坐标排序文本，改善多栏布局解析顺序
+        pdfConfig.setExtractInlineImages(false);//不提取 PDF 中的内嵌图片，防止 PDF内嵌图片泄露
+        pdfConfig.setSortByPosition(true); // 按 x/y 坐标排序文本，改善多栏布局解析顺序，解决多栏 PDF 阅读顺序错乱问题
         // 注意：Tika 2.9.2 中 setExtractAnnotations 方法可能不存在，关闭图片提取已足够
         context.set(PDFParserConfig.class, pdfConfig);
 
@@ -135,6 +144,8 @@ public class DocumentParseService {
         parser.parse(inputStream, handler, metadata, context);
 
         // 9. 返回提取的文本内容
+        // 文档的元数据（作者、创建时间等）由单独的 Metadata 对象接收。
+        // 所以 handler.toString() 拿到的天然就是纯正文，不含文档属性信息。
         return handler.toString();
     }
 

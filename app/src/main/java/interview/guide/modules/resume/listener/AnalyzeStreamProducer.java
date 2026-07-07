@@ -20,6 +20,7 @@ import java.util.Map;
 public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamProducer.AnalyzeTaskPayload> {
 
     private final ResumeRepository resumeRepository;
+    // 事务执行器
     private final TransactionalExecutor transactionalExecutor;
 
     record AnalyzeTaskPayload(Long resumeId, String content) {}
@@ -49,11 +50,13 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         return "分析";
     }
 
+    //定义 Stream
     @Override
     protected String streamKey() {
         return AsyncTaskStreamConstants.RESUME_ANALYZE_STREAM_KEY;
     }
 
+    //定义消息体，消息是 KV 结构，包含resumeId、content（简历全文）、retryCount（初始为 0）。
     @Override
     protected Map<String, String> buildMessage(AnalyzeTaskPayload payload) {
         return Map.of(

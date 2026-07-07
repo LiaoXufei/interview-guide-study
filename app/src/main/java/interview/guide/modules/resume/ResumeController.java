@@ -52,11 +52,9 @@ public class ResumeController {
     // 如果超出限制，将自动阻止请求并返回频率限制提示。
     @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
-    /*  
-        @RateLimit 是项目自定义的可重复注解，
-        默认时间窗口 1 秒，全局每秒最多 5 次、单 IP 每秒最多 5 次，防止批量上传拖垮服务。
-        重复简历的响应里带 "duplicate": true，前端据此展示不同的提示信息。 
-    */
+    // @RateLimit 是项目自定义的可重复注解，
+    // 默认时间窗口 1 秒，全局每秒最多 5 次、单 IP 每秒最多 5 次，防止批量上传拖垮服务。
+    // 重复简历的响应里带 "duplicate": true，前端据此展示不同的提示信息。
     public Result<Map<String, Object>> uploadAndAnalyze(@RequestParam("file") MultipartFile file) {
         Map<String, Object> result = uploadService.uploadAndAnalyze(file);
         //isDuplicate 判断区分首次上传和重复命中

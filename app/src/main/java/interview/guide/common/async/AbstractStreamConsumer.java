@@ -27,6 +27,13 @@ public abstract class AbstractStreamConsumer<T> {
         this.redisService = redisService;
     }
 
+    /*
+    * 基类 @PostConstruct 会：
+    * 1. 生成唯一消费者名：analyze-consumer-{8位UUID}
+    * 2. 起单线程守护线程池
+    * 3. 创建 Consumer Group（analyze-group）
+    * 4. 进入无限轮询消费循环  
+    */
     @PostConstruct
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
@@ -69,9 +76,15 @@ public abstract class AbstractStreamConsumer<T> {
         consumeLoop();
     }
 
+    // 消费循环 
     private void consumeLoop() {
         while (running.get()) {
             try {
+                /*
+                * RedisService.streamConsumeMessages 的策略是：
+                * 先回收 Pending 消息（autoClaim）：之前消费到一半崩溃、没 ACK 的消息，空闲超过 5 分钟会被重新认领
+                * 再读新消息（readGroup + neverDelivered）：从 Stream 拉尚未投递给消费者组的新消息
+                */
                 redisService.streamConsumeMessages(
                     streamKey(),
                     groupName(),

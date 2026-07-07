@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 public class TextCleaningService {
 
     // ========== 预编译正则表达式（性能优化）==========
+    //所有正则表达式都预编译为 static final Pattern，避免每次调用时重复编译。
     
     /**
      * 图片文件名行：image123.png
@@ -85,11 +86,12 @@ public class TextCleaningService {
         String t = text;
 
         // ========== 第一层：语义去噪 ==========
+        //去掉控制字符、图片文件名、图片链接、文件路径和分隔线
         t = CONTROL_CHARS.matcher(t).replaceAll("");
-        t = IMAGE_FILENAME_LINE.matcher(t).replaceAll("");
-        t = IMAGE_URL.matcher(t).replaceAll("");
-        t = FILE_URL.matcher(t).replaceAll("");
-        t = SEPARATOR_LINE.matcher(t).replaceAll("");
+        t = IMAGE_FILENAME_LINE.matcher(t).replaceAll("");  // image1.png 等整行
+        t = IMAGE_URL.matcher(t).replaceAll("");        // http://xxx.png
+        t = FILE_URL.matcher(t).replaceAll("");         // file:///tmp/xxx
+        t = SEPARATOR_LINE.matcher(t).replaceAll("");   // ---、===、***
 
         // ========== 第二层：格式规范化 ==========
         // 统一换行符

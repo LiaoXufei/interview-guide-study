@@ -31,6 +31,8 @@ public class ContentTypeDetectionService {
      */
     public String detectContentType(MultipartFile file) {
         try (InputStream inputStream = file.getInputStream()) {
+            // 核心调用
+            // Tika 会读取文件的前几十个字节，匹配已知的文件签名
             return tika.detect(inputStream, file.getOriginalFilename());
         } catch (IOException e) {
             log.warn("无法检测文件类型，使用 Content-Type 头部: {}", e.getMessage());

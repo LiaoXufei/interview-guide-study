@@ -35,7 +35,7 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         this.transactionalExecutor = transactionalExecutor;
     }
 
-    /**
+    /***
      * 发送分析任务到 Redis Stream
      *
      * @param resumeId 简历ID

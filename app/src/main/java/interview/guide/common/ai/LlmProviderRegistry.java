@@ -285,6 +285,9 @@ public class LlmProviderRegistry {
 
         if (config.isMessageChatMemoryEnabled()) {
             int maxMessages = Math.max(20, config.getMessageChatMemoryMaxMessages());
+            // 自动把多轮对话历史拼进 Prompt，维持上下文连贯性；用 MessageWindowChatMemory 滑窗截断防止过长
+            // 项目里默认关闭。原因是面试的各个场景（出题、回答、评估）有独立的会话状态管理逻辑，如果让 Spring AI 自动注入记忆，会和业务层的状态管理产生冲突，造成上下文“串味”。
+            // 只有 RAG 聊天会话场景才按需开启。
             MessageChatMemoryAdvisor memoryAdvisor = MessageChatMemoryAdvisor.builder(
                 MessageWindowChatMemory.builder()
                     .maxMessages(maxMessages)
@@ -293,6 +296,7 @@ public class LlmProviderRegistry {
             advisors.add(memoryAdvisor);
         }
 
+        // SimpleLoggerAdvisor打印每次调用的请求/响应日志，调试用
         if (config.isSimpleLoggerEnabled()) {
             advisors.add(new SimpleLoggerAdvisor());
         }
@@ -302,6 +306,7 @@ public class LlmProviderRegistry {
         return advisors;
     }
 
+    // 模型想调用工具时，自动执行 ToolCallback 并把结果喂回模型继续对话
     private ToolCallingAdvisor buildToolCallAdvisor(boolean conversationHistoryEnabled) {
         return ToolCallingAdvisor.builder()
             .toolCallingManager(toolCallingManager)
@@ -309,6 +314,7 @@ public class LlmProviderRegistry {
             .build();
     }
 
+    //检测模型输出中是否包含敏感词（"我现在扮演…"、"忽略之前的指令"），命中则拦截替换为固定回复
     private Optional<SafeGuardAdvisor> buildSafeGuardAdvisor() {
         AdvisorConfig config = properties.getAdvisors();
         if (config == null || !config.isSafeguardEnabled()) {

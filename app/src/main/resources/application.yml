@@ -76,7 +76,7 @@ spring:
   ai:
     # 禁用自动重试机制，让异常立即返回
     retry:
-      max-attempts: 1  # 不重试，失败立即返回
+      max-attempts: 1  # 不重试，失败立即返回。原因：Spring AI 的重试面向的是网络层失败（超时、5xx），而本项目要处理的是“调用成功但 JSON 解析失败”这类业务层问题。
       on-client-errors: false
     # PostgreSQL Vector Store配置
     vectorstore:
@@ -155,6 +155,7 @@ app:
       message-chat-memory-enabled: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_ENABLED:false}
       message-chat-memory-max-messages: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_MAX_MESSAGES:120}
       simple-logger-enabled: ${APP_AI_ADVISORS_SIMPLE_LOGGER_ENABLED:false}
+    ## 修复型重试的任务配置
     # 结构化输出重试次数（用于 BeanOutputConverter 解析失败时的业务层重试）
     structured-max-attempts: ${APP_AI_STRUCTURED_MAX_ATTEMPTS:2}
     # 重试时是否将上次错误原因注入提示词，帮助模型定向修复输出

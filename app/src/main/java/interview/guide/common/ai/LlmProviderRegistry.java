@@ -314,6 +314,8 @@ public class LlmProviderRegistry {
             .build();
     }
 
+    // 第二层：SafeGuardAdvisor（请求拦截）
+    // 直接匹配高危关键词组合，命中就走“快速拒绝”路径
     //检测模型输出中是否包含敏感词（"我现在扮演…"、"忽略之前的指令"），命中则拦截替换为固定回复
     private Optional<SafeGuardAdvisor> buildSafeGuardAdvisor() {
         AdvisorConfig config = properties.getAdvisors();

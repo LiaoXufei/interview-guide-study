@@ -14,6 +14,8 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
+ * BeanOutputConverter 可以把 AI 响应自动解析成 Java Record。
+ * 但是BeanOutputConverter 本身只负责解析，不会重试。
  * 统一封装结构化输出调用与重试策略。
  */
 @Component
@@ -26,8 +28,11 @@ public class StructuredOutputInvoker {
 3) 所有字符串内引号必须正确转义。
     """;
 
+    // 总调用次数
     private static final String METRIC_INVOCATIONS = "app.ai.structured_output.invocations";
+    // 包含重试的实际请求次数
     private static final String METRIC_ATTEMPTS = "app.ai.structured_output.attempts";
+    // 端到端耗时
     private static final String METRIC_LATENCY = "app.ai.structured_output.latency";
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_FAILURE = "failure";
@@ -58,6 +63,19 @@ public class StructuredOutputInvoker {
         this.meterRegistry = meterRegistry;
     }
 
+    /**
+     * 结构化输出调用
+     * @param <T>
+     * @param chatClient
+     * @param systemPromptWithFormat
+     * @param userPrompt
+     * @param outputConverter
+     * @param errorCode
+     * @param errorPrefix
+     * @param logContext
+     * @param log
+     * @return
+     */
     public <T> T invoke(
         ChatClient chatClient,
         String systemPromptWithFormat,
@@ -68,7 +86,7 @@ public class StructuredOutputInvoker {
         String logContext,
         Logger log
     ) {
-        long startNanos = System.nanoTime();
+        long startNanos = System.nanoTime();    // 入口处打时间戳
         String contextTag = normalizeContextTag(logContext);
         String securedSystemPrompt = systemPromptWithFormat
             + PromptSecurityConstants.ANTI_INJECTION_INSTRUCTION;
@@ -80,12 +98,13 @@ public class StructuredOutputInvoker {
             try {
                 T result = callStructuredOutput(
                     chatClient, attemptSystemPrompt, userPrompt, outputConverter, logContext, log);
-                recordAttempt(contextTag, STATUS_SUCCESS);
-                recordInvocation(contextTag, STATUS_SUCCESS, startNanos);
+                recordAttempt(contextTag, STATUS_SUCCESS);  // 每次 attempt 成功
+                recordInvocation(contextTag, STATUS_SUCCESS, startNanos);   // 整次 invoke 成功
                 return result;
+                //这样你可以算出：attempts - invocations 就是重试次数，attempts{status=failure} / attempts 就是单次尝试失败率。
             } catch (Exception e) {
                 lastError = e;
-                recordAttempt(contextTag, STATUS_FAILURE);
+                recordAttempt(contextTag, STATUS_FAILURE);  // 每次 attempt 失败
                 if (attempt < maxAttempts) {
                     log.warn("{}结构化解析失败，准备重试: attempt={}/{}, error={}",
                         logContext, attempt, maxAttempts, e.getMessage());
@@ -197,6 +216,13 @@ public class StructuredOutputInvoker {
         return true;
     }
 
+    /**
+     * 构建重试系统提示
+     * 在 Prompt 中注入上次失败的原因，让模型有针对性地修正，成功率显著提升
+     * @param systemPromptWithFormat
+     * @param lastError
+     * @return
+     */
     private String buildRetrySystemPrompt(String systemPromptWithFormat, Exception lastError) {
         if (!retryUseRepairPrompt) {
             return systemPromptWithFormat;
@@ -229,6 +255,7 @@ public class StructuredOutputInvoker {
         if (!isMetricsAvailable()) {
             return;
         }
+        //用的是 Micrometer 的 MeterRegistry——Spring Boot Actuator 自动装配的指标注册中心。
         meterRegistry.counter(
             METRIC_ATTEMPTS,
             Tags.of("context", contextTag, "status", status)
@@ -249,12 +276,18 @@ public class StructuredOutputInvoker {
         return metricsEnabled && meterRegistry != null;
     }
 
+    /**
+     * context tag 的归一化、
+     * 把原始 logContext 做了小写、去特殊字符、截断等处理，确保它符合 Prometheus label 的命名规范。
+     * @param raw
+     * @return
+     */
     private String normalizeContextTag(String raw) {
-        String source = (raw == null || raw.isBlank()) ? "unknown" : raw;
-        String normalized = source.toLowerCase(Locale.ROOT).trim().replace(' ', '_');
+        String source = (raw == null || raw.isBlank()) ? "unknown" : raw;   // "简历分析" → "unknown"（中文会被替换掉）
+        String normalized = source.toLowerCase(Locale.ROOT).trim().replace(' ', '_');   // "interview question" → "interview_question"
         normalized = NON_ALNUM_PATTERN.matcher(normalized).replaceAll("_");
         normalized = MULTI_UNDERSCORE.matcher(normalized).replaceAll("_");
-        normalized = normalized.replaceAll("^_+|_+$", "");
+        normalized = normalized.replaceAll("^_+|_+$", "");   // "resume-grading" → "resume_grading"
         if (normalized.isBlank()) {
             normalized = "unknown";
         }

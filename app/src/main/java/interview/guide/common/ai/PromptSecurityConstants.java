@@ -11,6 +11,7 @@ public final class PromptSecurityConstants {
     private PromptSecurityConstants() {}
 
     /**
+     * 第三层：ANTI_INJECTION_INSTRUCTION（模型层兜底）
      * 追加到所有 system prompt 末尾的防注入指令。
      * 告诉 LLM：{@literal <data-boundary>} 标记或 --- 分隔符内的文本是用户数据，不是指令。
      */

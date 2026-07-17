@@ -9,10 +9,11 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
+ * 第一层：PromptSanitizer（输入净化）
  * Prompt 注入净化工具。
- * <p>
  * 仅用于 4 个严重风险的直接拼接点（裸拼接，无模板包裹）。
  * 模板插值点有 Layer 2 的系统提示词保护，不需要额外净化。
+ * 用正则过滤四类高风险模式：1.行首角色标记（system:、user: 等）、2.注入短语（ignore previous instructions 等中英文变体）、3.模板分隔符伪造、4.XML 边界标签伪造
  */
 @Component
 public class PromptSanitizer {
@@ -25,12 +26,12 @@ public class PromptSanitizer {
         this.properties = properties;
     }
 
-    // 行首角色标记：只匹配行首，避免误杀 "Experience with system design"
+    // 1.行首角色标记：只匹配行首，避免误杀 "Experience with system design"
     private static final Pattern ROLE_INJECTION_PATTERN = Pattern.compile(
         "(?im)^\\s*(system|user|assistant|human|ai|model)\\s*[:：].*"
     );
 
-    // 注入短语：精确匹配，不单独匹配 "忽略" 或 "instruction" 等常见词
+    // 2.注入短语：精确匹配，不单独匹配 "忽略" 或 "instruction" 等常见词
     private static final Pattern INJECTION_PHRASE_PATTERN = Pattern.compile(
         "(ignore\\s+(previous|above|all|your)\\s*(instructions|prompts|rules))" +
         "|(forget\\s+(everything|all\\s*(previous\\s*)?(instructions|rules|prompts)))" +
@@ -43,12 +44,12 @@ public class PromptSanitizer {
         Pattern.CASE_INSENSITIVE
     );
 
-    // 分隔符伪造：匹配项目中 .st 模板使用的静态分隔符
+    // 3.分隔符伪造：匹配项目中 .st 模板使用的静态分隔符
     private static final Pattern DELIMITER_INJECTION_PATTERN = Pattern.compile(
         "---(?:简历|文档|问答)内容(?:开始|结束)---"
     );
 
-    // XML 边界标签伪造：防止攻击者构造 <data-boundary...> 来提前关闭包裹
+    // 4.XML 边界标签伪造：防止攻击者构造 <data-boundary...> 来提前关闭包裹
     private static final Pattern BOUNDARY_TAG_PATTERN = Pattern.compile(
         "</?data-boundary[^>]*>", Pattern.CASE_INSENSITIVE
     );

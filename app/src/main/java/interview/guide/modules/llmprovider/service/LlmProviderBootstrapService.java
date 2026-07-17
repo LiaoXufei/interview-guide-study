@@ -26,12 +26,17 @@ public class LlmProviderBootstrapService {
   @PostConstruct
   @Transactional
   public void seedProvidersIfNecessary() {
-    if (providerRepository.count() == 0) {
+    // 把 application.yml 里的 providers 写进 DB
+    if (providerRepository.count() == 0) {  // 这个判断很关键——只在第一次启动时迁移，避免每次启动覆盖运维在网页上改的配置。
       seedProviders();
     }
+    // 兜底默认 Chat/Embedding Provider
     ensureGlobalSetting();
   }
 
+  /**
+   * 迁移 providers
+   */
   private void seedProviders() {
     Map<String, ProviderConfig> providers = properties.getProviders();
     if (providers == null || providers.isEmpty()) {
@@ -44,29 +49,37 @@ public class LlmProviderBootstrapService {
         log.warn("Skip invalid provider seed: id={}", id);
         return;
       }
+
+      // 1. 把 YAML 里的 API Key 加密（AES-GCM）
       ApiKeyEncryptionService.EncryptedValue encrypted =
           encryptionService.encrypt(config.getApiKey() != null ? config.getApiKey() : "");
       boolean supportsEmbedding = Boolean.TRUE.equals(config.getSupportsEmbedding())
           || !isBlank(config.getEmbeddingModel());
 
+      // 2. 构建数据库实体
       LlmProviderEntity entity = LlmProviderEntity.builder()
-          .id(id)
-          .baseUrl(config.getBaseUrl())
-          .apiKeyNonce(encrypted.nonce())
-          .apiKeyCiphertext(encrypted.ciphertext())
-          .model(config.getModel())
-          .embeddingModel(trimOrNull(config.getEmbeddingModel()))
+          .id(id)                           // 唯一标识"dashscope"
+          .baseUrl(config.getBaseUrl())     // 接口地址"https://dashscope.aliyuncs.com/..."
+          .apiKeyNonce(encrypted.nonce())   // 加密后的密文
+          .apiKeyCiphertext(encrypted.ciphertext()) // 加密后的密文
+          .model(config.getModel())         // 模型名称
+          .embeddingModel(trimOrNull(config.getEmbeddingModel())) // 嵌入模型名称
           .embeddingDimensions(resolveEmbeddingDimensions(config.getEmbeddingDimensions()))
           .supportsEmbedding(supportsEmbedding)
           .temperature(config.getTemperature())
-          .enabled(true)
-          .builtin(true)
+          .enabled(true)            // 是否启用
+          .builtin(true)            // 是否内置
           .build();
+
+      // 3. 存入数据库
       providerRepository.save(entity);
     });
     log.info("Seeded {} LLM providers from application configuration", providerRepository.count());
   }
 
+  /**
+   * 兜底初始化全局设置
+   */
   private void ensureGlobalSetting() {
     if (globalSettingRepository.existsById(LlmGlobalSettingEntity.SINGLETON_ID)) {
       return;

@@ -32,13 +32,18 @@ public final class ApiPathResolver {
     ClientOptions options = ClientOptions.Companion.builder()
         .apiKey(apiKey)
         .credential(BearerTokenCredential.create(apiKey))
-        .baseUrl(resolveVersionedBaseUrl(baseUrl))
+        .baseUrl(resolveVersionedBaseUrl(baseUrl))  //在传给 SDK 之前，先自己处理好 baseUrl → 如果没带 /v1 就补上 → 然后把完整的 baseUrl 传给 SDK，SDK 不再额外加前缀
         .timeout(timeout)
         .httpClient(SpringAiOpenAiHttpClient.builder().timeout(timeout).build())
         .build();
     return new OpenAIClientImpl(options);
   }
 
+  /**
+   * 添加版本号 v1 到 baseUrl 中
+   * @param baseUrl
+   * @return
+   */
   public static String resolveVersionedBaseUrl(String baseUrl) {
     String stripped = stripTrailingSlashes(baseUrl);
     if (baseUrlContainsVersion(stripped)) {
@@ -47,6 +52,11 @@ public final class ApiPathResolver {
     return stripped + "/v1";
   }
 
+  /**
+   * 判断 baseUrl 是否包含版本号
+   * @param baseUrl
+   * @return
+   */
   public static boolean baseUrlContainsVersion(String baseUrl) {
     if (baseUrl == null || baseUrl.isBlank()) {
       return false;

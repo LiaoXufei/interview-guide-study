@@ -435,6 +435,11 @@ public class InterviewQuestionService {
             promptSanitizer.wrapWithDelimiters("jd", promptSanitizer.sanitize(sourceJd));
     }
 
+    /**
+     * 把 skill.persona() 拼进 system prompt 末尾，并加上说明和安全包裹
+     * @param skill
+     * @return
+     */
     private String buildSkillPersonaSection(SkillDTO skill) {
         if (skill == null || skill.persona() == null || skill.persona().isBlank()) {
             return "";

@@ -188,7 +188,7 @@ public class InterviewSessionService {
     }
 
     /**
-     * 从实体恢复会话并缓存到 Redis
+     * 从 session 聚合实体恢复会话并缓存到 Redis
      */
     private CachedSession restoreSessionFromEntity(InterviewSessionEntity entity) {
         try {
@@ -198,7 +198,7 @@ public class InterviewSessionService {
                 new TypeReference<>() {}
             );
 
-            // 恢复已保存的答案
+            // 恢复已保存的答案，
             List<InterviewAnswerEntity> answers = persistenceService.findAnswersBySessionId(entity.getSessionId());
             for (InterviewAnswerEntity answer : answers) {
                 int index = answer.getQuestionIndex();
@@ -210,7 +210,7 @@ public class InterviewSessionService {
 
             SessionStatus status = convertStatus(entity.getStatus());
 
-            // 保存到 Redis 缓存
+            // 保存到 Redis 缓存，Redis 里存的是整包会话状态，需要从 DB 聚合后再写入。
             sessionCache.saveSession(
                 entity.getSessionId(),
                 entity.getResume() != null ? entity.getResume().getResumeText() : "",
@@ -333,11 +333,19 @@ public class InterviewSessionService {
         );
     }
 
+    /**
+     * 保存提交的答案
+     * @param request
+     * @param index
+     * @param question
+     * @param newIndex
+     * @param newStatus
+     */
     private void persistSubmittedAnswer(SubmitAnswerRequest request, int index,
                                         InterviewQuestionDTO question, int newIndex,
                                         SessionStatus newStatus) {
         try {
-            persistenceService.saveAnswer(
+            persistenceService.saveAnswer(  // 保存答案到数据库,每提交一题，往 interview_answers 写/更新
                 request.sessionId(), index,
                 question.question(), question.category(),
                 request.answer(), 0, null  // 分数在报告生成时更新

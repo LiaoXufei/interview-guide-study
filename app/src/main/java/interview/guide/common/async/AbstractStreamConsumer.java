@@ -34,7 +34,7 @@ public abstract class AbstractStreamConsumer<T> {
     * 3. 创建 Consumer Group（analyze-group）
     * 4. 进入无限轮询消费循环  
     */
-    @PostConstruct
+    @PostConstruct // 初始化消费者名与单线程守护线程池，并将 running 置为 true 后提交消费循环，从而在应用启动后自动开始拉取 Redis Stream 消息；不会在每次请求时重复执行。
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
         this.executorService = new ThreadPoolExecutor(
@@ -89,10 +89,10 @@ public abstract class AbstractStreamConsumer<T> {
                     streamKey(),
                     groupName(),
                     consumerName,
-                    AsyncTaskStreamConstants.BATCH_SIZE,
-                    AsyncTaskStreamConstants.POLL_INTERVAL_MS,
-                    AsyncTaskStreamConstants.PENDING_IDLE_TIMEOUT_MS,
-                    AsyncTaskStreamConstants.PENDING_CLAIM_BATCH_SIZE,
+                    AsyncTaskStreamConstants.BATCH_SIZE,    // 每批最多 10 条
+                    AsyncTaskStreamConstants.POLL_INTERVAL_MS,    // 每批间隔 100 毫秒
+                    AsyncTaskStreamConstants.PENDING_IDLE_TIMEOUT_MS,    // pending超过 5 分钟会被重新认领
+                    AsyncTaskStreamConstants.PENDING_CLAIM_BATCH_SIZE,    // 每次最多认领 10 条
                     this::processMessage
                 );
             } catch (Exception e) {
@@ -105,6 +105,11 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
+    /**
+     * 处理消息的基类方法
+     * @param messageId
+     * @param data
+     */
     private void processMessage(StreamMessageId messageId, Map<String, String> data) {
         T payload;
         try {
@@ -132,10 +137,10 @@ public abstract class AbstractStreamConsumer<T> {
                 log.info("{} task skipped: {}", taskDisplayName(), payloadIdentifier(payload));
                 return;
             }
-            markProcessing(payload);
-            processBusiness(payload);
-            markCompleted(payload);
-            ackMessage(messageId);
+            markProcessing(payload);    //DB 状态 → PROCESSING
+            processBusiness(payload);   //调 gradingService.analyzeResume() 做 AI 分析，保存结果
+            markCompleted(payload);    //DB 状态 → COMPLETED
+            ackMessage(messageId);    //ACK 确认消息处理成功
             log.info("{} task completed: {}", taskDisplayName(), payloadIdentifier(payload));
         } catch (Exception e) {
             log.error("{} task failed: {}", taskDisplayName(), payloadIdentifier(payload), e);

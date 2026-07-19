@@ -107,6 +107,9 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         updateEvaluateStatus(payload.sessionId(), AsyncTaskStatus.PROCESSING, null);
     }
 
+    /**
+     * 执行评估业务
+     */
     @Override
     protected void processBusiness(EvaluatePayload payload) {
         String sessionId = payload.sessionId();

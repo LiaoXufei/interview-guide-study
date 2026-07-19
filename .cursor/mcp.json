@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "C:\\Users\\fei\\Desktop\\项目学习\\AI_agent开发\\interview-guide-study"
+      ]
+    }
+  }
+}

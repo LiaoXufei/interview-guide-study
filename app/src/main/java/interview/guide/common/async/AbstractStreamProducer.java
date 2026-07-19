@@ -19,12 +19,16 @@ public abstract class AbstractStreamProducer<T> {
         this.redisService = redisService;
     }
 
+    /**
+     * 发送任务到Stream的基类方法
+     * @param payload
+     */
     protected void sendTask(T payload) {
         try {
             String messageId = redisService.streamAdd(
                 streamKey(),
                 buildMessage(payload),
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
+                AsyncTaskStreamConstants.STREAM_MAX_LEN // 最多保留 1000 条，自动裁剪
             );
             log.info("{}任务已发送到Stream: {}, messageId={}",
                 taskDisplayName(), payloadIdentifier(payload), messageId);

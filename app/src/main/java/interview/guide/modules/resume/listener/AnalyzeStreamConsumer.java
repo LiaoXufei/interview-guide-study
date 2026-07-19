@@ -66,6 +66,10 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
         return "analyze-consumer";
     }
 
+    /**
+     * 解析消息负载
+     * 如果消息格式错误，跳过
+     */
     @Override
     protected AnalyzePayload parsePayload(StreamMessageId messageId, Map<String, String> data) {
         String resumeIdStr = data.get(AsyncTaskStreamConstants.FIELD_RESUME_ID);
@@ -82,11 +86,14 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
         return "resumeId=" + payload.resumeId();
     }
 
+    /**
+     * 跳过已完成的任务
+     */
     @Override
     protected boolean shouldSkip(AnalyzePayload payload) {
         return resumeRepository.findById(payload.resumeId())
             .map(resume -> resume.getAnalyzeStatus() == AsyncTaskStatus.COMPLETED)
-            .orElse(true);
+            .orElse(true);  // 简历已删除也跳过
     }
 
     @Override
@@ -121,6 +128,10 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
         updateAnalyzeStatus(payload.resumeId(), AsyncTaskStatus.FAILED, error);
     }
 
+    /**
+     * 重试入队
+     * 失败时不是原地重试，而是 ACK 旧消息 + 发一条新消息（retryCount 递增），最多 3 次
+     */
     @Override
     protected void retryMessage(AnalyzePayload payload, int retryCount) {
         Long resumeId = payload.resumeId();

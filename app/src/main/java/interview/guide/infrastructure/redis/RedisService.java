@@ -306,6 +306,7 @@ public class RedisService {
             StreamMessageProcessor processor) {
 
         RStream<String, String> stream = redissonClient.getStream(streamKey, StringCodec.INSTANCE);
+        // 优先回收超时 Pending
         Map<StreamMessageId, Map<String, String>> messages = reclaimPendingMessages(
             stream,
             streamKey,

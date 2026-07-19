@@ -71,6 +71,9 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         return "resumeId=" + payload.resumeId();
     }
 
+    /**
+     * 若 Redis 不可用，生产者会把简历状态标为 FAILED（独立事务，避免和主事务纠缠）
+     */
     @Override
     protected void onSendFailed(AnalyzeTaskPayload payload, String error) {
         transactionalExecutor.runRequiresNew(

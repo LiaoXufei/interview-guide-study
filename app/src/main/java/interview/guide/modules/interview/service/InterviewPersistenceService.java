@@ -56,7 +56,7 @@ public class InterviewPersistenceService {
             session.setTotalQuestions(totalQuestions);
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
-            session.setQuestionsJson(objectMapper.writeValueAsString(questions));
+            session.setQuestionsJson(objectMapper.writeValueAsString(questions));   // 序列化问题列表，整块写入
             session.setLlmProvider(llmProvider != null ? llmProvider : "default");
             session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
             session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);

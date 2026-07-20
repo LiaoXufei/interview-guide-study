@@ -47,11 +47,12 @@ public class AnswerEvaluationService {
         log.info("开始评估面试: {}, 共{}题", sessionId, questions.size());
 
         try {
-            // 转为通用问答记录
+            // 转为通用问答记录：入参适配，把业务 DTO 转成通用 QaRecord 
             List<QaRecord> qaRecords = questions.stream()
                 .map(q -> new QaRecord(q.questionIndex(), q.question(), q.category(), q.userAnswer()))
                 .toList();
 
+            // 拼装上下文 + 调用内核
             String referenceContext = skillService.buildEvaluationReferenceSectionSafe(
                 persistenceService.findBySessionId(sessionId)
                     .map(s -> s.getSkillId())
@@ -63,7 +64,7 @@ public class AnswerEvaluationService {
                 chatClient, sessionId, qaRecords, resumeText, referenceContext
             );
 
-            // 转为文字面试专用 DTO
+            // 出参适配：转为文字面试专用 DTO,逐字段映射到 InterviewReportDTO
             return toInterviewReportDTO(report);
         } catch (BusinessException e) {
             throw e;

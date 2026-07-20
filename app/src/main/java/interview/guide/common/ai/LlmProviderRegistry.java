@@ -239,23 +239,35 @@ public class LlmProviderRegistry {
         return builder.build();
     }
 
+    /**
+     * 获取 ChatModel
+     * @param providerId
+     * @return
+     */
     private OpenAiChatModel getChatModel(String providerId) {
+        // 通过 chatModelCache.computeIfAbsent 复用同一个 OpenAiChatModel 实例
         return chatModelCache.computeIfAbsent(providerId, id -> {
             log.info("[LlmProviderRegistry] Creating new ChatModel for provider: {}", id);
             return buildChatModel(id);
         });
     }
 
+    /**
+     * 创建 ChatModel
+     * @param providerId
+     * @return
+     */
     private OpenAiChatModel buildChatModel(String providerId) {
         ProviderSnapshot config = loadProviderOrThrow(providerId);
         log.info("[LlmProviderRegistry] Building ChatModel - Provider: {}, BaseUrl: {}, Model: {}",
                  providerId, config.baseUrl(), config.model());
 
+        
         OpenAIClient openAiClient = ApiPathResolver.buildOpenAiClient(config.baseUrl(), config.apiKey());
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(config.model())
-                .temperature(config.temperature() != null ? config.temperature() : 0.2)
+                .temperature(config.temperature() != null ? config.temperature() : 0.2) // 默认温度为0.2
                 .build();
 
         return OpenAiChatModel.builder()

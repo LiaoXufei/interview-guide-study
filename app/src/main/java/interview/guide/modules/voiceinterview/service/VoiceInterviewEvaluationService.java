@@ -92,6 +92,11 @@ public class VoiceInterviewEvaluationService {
         return buildDetailDTO(evaluation);
     }
 
+    /**
+     * 构建QA记录
+     * @param messages
+     * @return
+     */
     private List<QaRecord> buildQaRecords(List<VoiceInterviewMessageEntity> messages) {
         List<QaRecord> records = new ArrayList<>();
         int index = 0;
@@ -101,6 +106,7 @@ public class VoiceInterviewEvaluationService {
             String aiText = VoiceInterviewMessageEntity.trimToNull(msg.getAiGeneratedText());
             String userText = VoiceInterviewMessageEntity.trimToNull(msg.getUserRecognizedText());
 
+            // 用一个 PendingQuestion 缓存上一次 AI 的话，遇到用户的回复就配成一对 QaRecord
             if (pendingQuestion != null && userText != null) {
                 records.add(new QaRecord(
                     index,
@@ -116,6 +122,7 @@ public class VoiceInterviewEvaluationService {
                 continue;
             }
 
+            // AI 说了但用户没回 → 记一个 userAnswer=null 的 QaRecord（未回答)
             if (pendingQuestion != null) {
                 records.add(new QaRecord(
                     index,
@@ -138,6 +145,7 @@ public class VoiceInterviewEvaluationService {
             }
         }
 
+        // AI 说了但用户没回 → 记一个 userAnswer=null 的 QaRecord（未回答)
         if (pendingQuestion != null) {
             records.add(new QaRecord(
                 index,

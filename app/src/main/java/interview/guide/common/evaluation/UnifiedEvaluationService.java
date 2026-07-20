@@ -104,6 +104,16 @@ public class UnifiedEvaluationService {
         return evaluate(chatClient, sessionId, qaRecords, resumeText, null);
     }
 
+    /**
+     * 评估面试问答（文字和语音通用）
+     *
+     * @param chatClient  LLM 客户端
+     * @param sessionId   会话ID（用于日志）
+     * @param qaRecords   问答记录列表
+     * @param resumeText  简历摘要（可选，可为 null）
+     * @param referenceContext  参考基线（可选，可为 null）
+     * @return 评估报告
+     */
     public EvaluationReport evaluate(ChatClient chatClient,
                                      String sessionId,
                                      List<QaRecord> qaRecords,
@@ -111,6 +121,7 @@ public class UnifiedEvaluationService {
                                      String referenceContext) {
         log.info("开始评估面试: sessionId={}, 共{}题", sessionId, qaRecords.size());
 
+        // 第 1 步：简历超过 3000 字、参考基线超过 6000 字就截断，防止 token 爆炸
         String resumeContext = resumeText != null ? resumeText : "";
         // 超长简历截断，保留前 3000 字符（约 1500~2000 tokens），避免极端情况下 token 消耗过大
         if (resumeContext.length() > 3000) {
@@ -122,18 +133,19 @@ public class UnifiedEvaluationService {
                 + "\n...(参考基线过长，已截断)";
         }
 
-        // 分批评估
+        // 第 2 步：分批评估分
         List<BatchResult> batchResults = evaluateInBatches(
             chatClient, sessionId, resumeContext, qaRecords, referenceBaseline
         );
 
-        // 合并批次结果
+        // 第 3 步：合并批次结果
         List<QuestionEvalDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
-        String fallbackFeedback = mergeOverallFeedback(batchResults);
-        List<String> fallbackStrengths = mergeListItems(batchResults, true);
-        List<String> fallbackImprovements = mergeListItems(batchResults, false);
+        String fallbackFeedback = mergeOverallFeedback(batchResults);                       // 各批评语拼接
+        List<String> fallbackStrengths = mergeListItems(batchResults, true);  // 优势去重合并
+        List<String> fallbackImprovements = mergeListItems(batchResults, false); // 改进去重合并
 
-        // 二次汇总
+        // 第 4 步：二次汇总 + 降级兜底
+        // 分批评估每批只看自己那几题，给出的"整体评语/优点/改进"是局部的。所以再调一次 LLM 做全局汇总
         SummaryDTO summary = summarizeBatchResults(
             chatClient, sessionId, resumeContext, referenceBaseline, qaRecords,
             mergedEvaluations, fallbackFeedback, fallbackStrengths, fallbackImprovements
@@ -161,6 +173,9 @@ public class UnifiedEvaluationService {
         return results;
     }
 
+    /**
+     * 评估批次
+     */
     private BatchReportDTO evaluateBatch(ChatClient chatClient, String sessionId,
                                           String resumeContext, String referenceContext,
                                           List<QaRecord> batch) {
@@ -174,16 +189,17 @@ public class UnifiedEvaluationService {
             (referenceContext != null && !referenceContext.isBlank()) ? referenceContext : "无");
         String userPrompt = userPromptTemplate.render(variables);
 
+        // outputConverter.getFormat() 把目标 Java record 的 JSON schema 注入 system prompt，告诉模型"按这个结构输出"
         String systemPromptWithFormat = systemPrompt + "\n\n" + outputConverter.getFormat();
         try {
-            return structuredOutputInvoker.invoke(
+            return structuredOutputInvoker.invoke(  // 实际的 LLM 调用 + JSON 解析失败重试全部委托给 StructuredOutputInvoker
                 chatClient, systemPromptWithFormat, userPrompt, outputConverter,
                 ErrorCode.INTERVIEW_EVALUATION_FAILED, "批次评估失败：", "批次评估", log
             );
         } catch (Exception e) {
             log.error("批次评估失败: sessionId={}, batchSize={}, error={}",
                 sessionId, batch.size(), e.getMessage(), e);
-            // 返回空报告，让合并逻辑用零分兜底
+            // 返回空报告，而不是抛异常，让合并逻辑用零分兜底
             return null;
         }
     }
@@ -199,6 +215,12 @@ public class UnifiedEvaluationService {
         return sb.toString();
     }
 
+    /**
+     * 合并批次结果
+     * 三件事要合并：每题评分、整体评语、优点/改进建议。
+     * @param batchResults
+     * @return
+     */
     private List<QuestionEvalDTO> mergeQuestionEvaluations(List<BatchResult> batchResults) {
         List<QuestionEvalDTO> merged = new ArrayList<>();
         for (BatchResult result : batchResults) {
@@ -207,6 +229,9 @@ public class UnifiedEvaluationService {
                 result.report() != null && result.report().questionEvaluations() != null
                     ? result.report().questionEvaluations()
                     : List.of();
+
+            // 对齐保护：按 expectedSize = endIndex - startIndex 循环，如果这批模型少返回了题目，就补一个 0 分的占位
+            // 这保证合并后题目数和原始 qaRecords 数量严格对齐，否则 buildReport 里的索引会错位。
             for (int i = 0; i < expectedSize; i++) {
                 if (i < current.size() && current.get(i) != null) {
                     merged.add(current.get(i));
@@ -231,6 +256,7 @@ public class UnifiedEvaluationService {
     }
 
     private List<String> mergeListItems(List<BatchResult> batchResults, boolean strengthsMode) {
+        // 用 LinkedHashSet 去重保序——这是代码层的初筛去重，但只能去完全相同的字符串，去不掉语义重复（"基础扎实"和"基础知识牢固"）。
         Set<String> merged = new LinkedHashSet<>();
         for (BatchResult result : batchResults) {
             BatchReportDTO report = result.report();
@@ -245,6 +271,19 @@ public class UnifiedEvaluationService {
         return merged.stream().limit(8).toList();
     }
 
+    /**
+     * 合并批次结果，将进行二次总结
+     * @param chatClient
+     * @param sessionId
+     * @param resumeContext 简历（ 截断到 3000 字符）
+     * @param referenceContext 基线（截断到 6000 字符）
+     * @param qaRecords
+     * @param evaluations
+     * @param fallbackFeedback
+     * @param fallbackStrengths
+     * @param fallbackImprovements
+     * @return
+     */
     private SummaryDTO summarizeBatchResults(
             ChatClient chatClient, String sessionId, String resumeContext, String referenceContext,
             List<QaRecord> qaRecords, List<QuestionEvalDTO> evaluations,
@@ -255,10 +294,14 @@ public class UnifiedEvaluationService {
             vars.put("resumeText", resumeContext);
             vars.put("referenceContext",
                 (referenceContext != null && !referenceContext.isBlank()) ? referenceContext : "无");
-            vars.put("categorySummary", buildCategorySummary(qaRecords, evaluations));
-            vars.put("questionHighlights", buildQuestionHighlights(qaRecords, evaluations));
-            vars.put("fallbackOverallFeedback", fallbackFeedback);
-            vars.put("fallbackStrengths", String.join("\n", fallbackStrengths));
+
+            // 用 buildCategorySummary 和 buildQuestionHighlights 生成压缩后的分类摘要和高亮题目喂给汇总 prompt
+            // 避免把所有批次原始内容全塞进去，控制 token
+            vars.put("categorySummary", buildCategorySummary(qaRecords, evaluations));  // categorySummary 按技术栈聚合平均分：它不是简单的全局平均——而是先按 category 分组求组内平均，再列出来。
+            vars.put("questionHighlights", buildQuestionHighlights(qaRecords, evaluations));// questionHighlights 压缩摘要，限 20 条
+
+            vars.put("fallbackOverallFeedback", fallbackFeedback);  // 把每批的反馈拼成 fallbackOverallFeedback
+            vars.put("fallbackStrengths", String.join("\n", fallbackStrengths));    // 优点改进拼成 fallback 列表
             vars.put("fallbackImprovements", String.join("\n", fallbackImprovements));
             String summaryUser = summaryUserPromptTemplate.render(vars);
 
@@ -268,17 +311,28 @@ public class UnifiedEvaluationService {
                 ErrorCode.INTERVIEW_EVALUATION_FAILED, "总结评估失败：", "总结评估", log
             );
 
+            // 汇总成功就用汇总结果，sanitizeItems 做去重+截断 8 条
             String feedback = dto != null && dto.overallFeedback() != null && !dto.overallFeedback().isBlank()
                 ? dto.overallFeedback() : fallbackFeedback;
             List<String> strengths = sanitizeItems(dto != null ? dto.strengths() : null, fallbackStrengths);
             List<String> improvements = sanitizeItems(dto != null ? dto.improvements() : null, fallbackImprovements);
             return new SummaryDTO(feedback, strengths, improvements);
-        } catch (Exception e) {
+        }
+
+        // 汇总失败时 catch 里直接用 fallback
+        // 即使第二次 LLM 调用也挂了，仍然有第一次分批聚合的结果兜底，不会整场评估失败
+        catch (Exception e) {
             log.warn("二次汇总评估失败，降级到批次聚合结果: sessionId={}, error={}", sessionId, e.getMessage());
             return new SummaryDTO(fallbackFeedback, fallbackStrengths, fallbackImprovements);
         }
     }
 
+    /**
+     * 去重、截断
+     * @param primary
+     * @param fallback
+     * @return
+     */
     private List<String> sanitizeItems(List<String> primary, List<String> fallback) {
         List<String> source = (primary != null && !primary.isEmpty()) ? primary : fallback;
         if (source == null || source.isEmpty()) return List.of();
@@ -363,6 +417,16 @@ public class UnifiedEvaluationService {
             .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * 构建问题的压缩摘要
+     * @param qaRecords
+     * @param evaluations
+     * @return
+     * 
+     * 输出形如：
+     * - Q1 | 请介绍你的项目架构... | 分数:65 | 反馈:对微服务拆分理由阐述不清...
+     * - Q2 | 讲讲 ConcurrentHashMap... | 分数:70 | 反馈:分段锁概念有误...
+     */
     private String buildQuestionHighlights(List<QaRecord> qaRecords, List<QuestionEvalDTO> evaluations) {
         List<String> highlights = new ArrayList<>();
         for (int i = 0; i < qaRecords.size(); i++) {
@@ -374,6 +438,8 @@ public class UnifiedEvaluationService {
             String shortF = feedback.length() > 80 ? feedback.substring(0, 80) + "..." : feedback;
             highlights.add(String.format("- Q%d | %s | 分数:%d | 反馈:%s", q.questionIndex() + 1, shortQ, score, shortF));
         }
+
+        // .limit(20) 硬限制 20 条。如果一场面试超过 20 题，多余的题不进 highlights，但它们的成绩已经进了 categorySummary 的聚合平均，所以信息没丢，只是细节被裁剪。
         return highlights.stream().limit(20).collect(Collectors.joining("\n"));
     }
 }

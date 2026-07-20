@@ -62,6 +62,7 @@ public class RateLimitAspect {
 
     /**
      * 环绕通知：拦截带 @RateLimit 或 @RateLimit.Container 注解的方法
+     * 多个维度之间独立计数，各自有独立的滑动窗口
      */
     @Around("@annotation(interview.guide.common.annotation.RateLimit) || " +
             "@annotation(interview.guide.common.annotation.RateLimit.Container)")
@@ -100,6 +101,7 @@ public class RateLimitAspect {
         };
 
         try {
+            // 用 SHA1 复用已加载的脚本
             Object resultObj = rScript.evalSha(
                     RScript.Mode.READ_WRITE,
                     luaScriptSha,
@@ -111,7 +113,7 @@ public class RateLimitAspect {
         } catch (org.redisson.client.RedisException e) {
             // Redis 重启后脚本缓存丢失，重新加载并重试
             if (e.getMessage() != null && e.getMessage().contains("NOSCRIPT")) {
-                loadScript();
+                loadScript();                   // Redis 重启后脚本缓存丢了 → 重新加载
                 Object resultObj = rScript.evalSha(
                         RScript.Mode.READ_WRITE,
                         luaScriptSha,
@@ -119,7 +121,7 @@ public class RateLimitAspect {
                         keysList,
                         args
                 );
-                return convertToLong(resultObj);
+                return convertToLong(resultObj);// 重试
             }
             throw e;
         }
@@ -151,14 +153,22 @@ public class RateLimitAspect {
         return null;
     }
 
+    /**
+     * 生成限流键
+     * @param className
+     * @param methodName
+     * @param dimension
+     * @return
+     */
     private String generateKey(String className, String methodName, RateLimit.Dimension dimension) {
         String hashTag = "{" + className + ":" + methodName + "}";
         String keyPrefix = "ratelimit:" + hashTag;
 
+        // 三个 key 在 Redis 里是完全独立的 Sorted Set，互不影响
         return switch (dimension) {
-            case GLOBAL -> keyPrefix + ":global";
-            case IP -> keyPrefix + ":ip:" + getClientIp();
-            case USER -> keyPrefix + ":user:" + getCurrentUserId();
+            case GLOBAL -> keyPrefix + ":global";           // GLOBAL 维度所有请求共享一个 key（全平台一个计数器）
+            case IP -> keyPrefix + ":ip:" + getClientIp();  // IP 维度每个 IP 一个 key
+            case USER -> keyPrefix + ":user:" + getCurrentUserId(); // USER 维度每个用户一个 key
         };
     }
 

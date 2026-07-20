@@ -84,7 +84,7 @@ public class InterviewSessionCache {
     }
 
     /**
-     * 保存会话到缓存
+     *  用户离开未完成会话时，保存会话到缓存，写两个键
      */
     public void saveSession(String sessionId, String resumeText, Long resumeId,
                            List<InterviewQuestionDTO> questions, int currentIndex,
@@ -94,11 +94,13 @@ public class InterviewSessionCache {
             sessionId, resumeText, resumeId, questions, currentIndex, status, objectMapper
         );
 
-        redisService.set(key, cachedSession, SESSION_TTL);
+        //  先写会话键
+        redisService.set(key, cachedSession, SESSION_TTL);  // 键1：会话键，存完整会话对象
 
         // 如果有 resumeId，建立映射关系（用于查找未完成会话）
-        if (resumeId != null && isUnfinishedStatus(status)) {
-            saveResumeSessionMapping(resumeId, sessionId);
+        if (resumeId != null && isUnfinishedStatus(status)) { //isUnfinishedStatus(status)——只有状态是 CREATED 或 IN_PROGRESS 才写映射键，这意味着已完成的会话在 Redis 里查不到映射键
+            // 再写映射键
+            saveResumeSessionMapping(resumeId, sessionId);  // 键2：映射键，存 sessionId 字符串
         }
 
         log.debug("会话已缓存: sessionId={}, resumeId={}, status={}", sessionId, resumeId, status);
@@ -179,19 +181,21 @@ public class InterviewSessionCache {
     }
 
     /**
-     * 根据简历ID查找未完成的会话ID
+     * 用户回来时，使用两次 GET 查回会话，根据简历ID查找未完成的会话ID
      */
     public Optional<String> findUnfinishedSessionId(Long resumeId) {
-        String key = buildResumeSessionKey(resumeId);
-        String sessionId = redisService.get(key);
+        // 系统先用 resumeId 查这个映射键拿到 sessionId
+        String key = buildResumeSessionKey(resumeId);   // interview:resume:{resumeId}
+        String sessionId = redisService.get(key);       // 第1次GET：映射键 → sessionId
+
         if (sessionId != null) {
             // 验证会话是否仍然存在且未完成
-            Optional<CachedSession> sessionOpt = getSession(sessionId);
-            if (sessionOpt.isPresent() && isUnfinishedStatus(sessionOpt.get().getStatus())) {
+            Optional<CachedSession> sessionOpt = getSession(sessionId); // 第2次GET：会话键 → 完整会话
+            if (sessionOpt.isPresent() && isUnfinishedStatus(sessionOpt.get().getStatus())) {   //双重校验：验证会话键还在、且状态仍是非完成态
                 return Optional.of(sessionId);
             } else {
                 // 会话已不存在或已完成，清理映射
-                redisService.delete(key);
+                redisService.delete(key);   // 如果不做这步清理，下次查询还会命中这条过期数据，用户会被错误地导航到一个已完成的面试。
             }
         }
         return Optional.empty();
@@ -219,6 +223,8 @@ public class InterviewSessionCache {
         return SESSION_KEY_PREFIX + sessionId;
     }
 
+    // 键构造方法
+    // "interview:resume:" + resumeId，值就是 sessionId 字符串本身
     private String buildResumeSessionKey(Long resumeId) {
         return RESUME_SESSION_KEY_PREFIX + resumeId;
     }

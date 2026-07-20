@@ -268,7 +268,7 @@ public class InterviewSessionService {
             return null; // 所有问题已回答完
         }
 
-        // 更新状态为进行中
+        // 更新状态为进行中，CREATED → IN_PROGRESS（原状态必须是 CREATED)
         if (session.getStatus() == SessionStatus.CREATED) {
             session.setStatus(SessionStatus.IN_PROGRESS);
             sessionCache.updateSessionStatus(sessionId, SessionStatus.IN_PROGRESS);
@@ -310,6 +310,7 @@ public class InterviewSessionService {
         boolean hasNextQuestion = newIndex < questions.size();
         InterviewQuestionDTO nextQuestion = hasNextQuestion ? questions.get(newIndex) : null;
 
+        // IN_PROGRESS → COMPLETED（答完最后一题自动转）
         SessionStatus newStatus = hasNextQuestion ? SessionStatus.IN_PROGRESS : SessionStatus.COMPLETED;
 
         persistSubmittedAnswer(request, index, question, newIndex, newStatus);
@@ -418,6 +419,7 @@ public class InterviewSessionService {
     public void completeInterview(String sessionId) {
         CachedSession session = getOrRestoreSession(sessionId);
 
+        // 已 COMPLETED/EVALUATED 不能再交卷，任意非终态 禁止→ COMPLETED
         if (session.getStatus() == SessionStatus.COMPLETED || session.getStatus() == SessionStatus.EVALUATED) {
             throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
         }
@@ -428,9 +430,8 @@ public class InterviewSessionService {
         // 更新数据库状态
         try {
             persistenceService.updateSessionStatus(sessionId,
-                InterviewSessionEntity.SessionStatus.COMPLETED);
-            // 设置评估状态为 PENDING
-            persistenceService.updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);
+                InterviewSessionEntity.SessionStatus.COMPLETED);     // 改 Redis 缓存状态为 COMPLETED
+            persistenceService.updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);// 改 Redis 缓存状态为 PENDING
         } catch (Exception e) {
             log.warn("更新会话状态失败: {}", e.getMessage());
         }
@@ -468,6 +469,7 @@ public class InterviewSessionService {
     public InterviewReportDTO generateReport(String sessionId) {
         CachedSession session = getOrRestoreSession(sessionId);
 
+        // COMPLETED/EVALUATED → EVALUATED（原状态必须是完成态）
         if (session.getStatus() != SessionStatus.COMPLETED && session.getStatus() != SessionStatus.EVALUATED) {
             throw new BusinessException(ErrorCode.INTERVIEW_NOT_COMPLETED, "面试尚未完成，无法生成报告");
         }

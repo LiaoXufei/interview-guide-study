@@ -249,6 +249,9 @@ public class InterviewSkillService {
         return calculateAllocation(getSkill(skillId).categories(), totalQuestions);
     }
 
+    /**
+     * 不同的重要等级的题目数量
+     */
     public Map<String, Integer> calculateAllocation(List<SkillCategoryDTO> categories, int totalQuestions) {
         List<SkillCategoryDTO> alwaysOneCats = new ArrayList<>();
         List<SkillCategoryDTO> coreCats = new ArrayList<>();

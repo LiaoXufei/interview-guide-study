@@ -112,6 +112,9 @@ public class InterviewQuestionService {
         return new PromptTemplate(loader.getResource(location).getContentAsString(StandardCharsets.UTF_8));
     }
 
+    /**
+     * 销毁执行器
+     */
     @PreDestroy
     void destroy() {
         questionExecutor.shutdownNow();
@@ -145,11 +148,13 @@ public class InterviewQuestionService {
         log.info("并行出题: skill={}, total={}, resumeCount={}, directionCount={}",
             skillId, questionCount, resumeCount, directionCount);
 
+        // 调用虚拟线程并行生成简历题
         CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
             () -> generateResumeQuestions(questionChatClient, resumeText, resumeCount, skill,
                 difficultyDesc, historicalSection),
             questionExecutor);
 
+        // 调用虚拟线程并行生成方向题
         CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
             () -> generateDirectionOnly(questionChatClient, skill, difficultyDesc, directionCount,
                 historicalSection),

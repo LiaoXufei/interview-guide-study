@@ -46,7 +46,7 @@ public class KnowledgeBaseUploadService {
      * @return 上传结果和存储信息（包含duplicate字段，表示是否为重复上传）
      */
     public Map<String, Object> uploadKnowledgeBase(MultipartFile file, String name, String category) {
-        // 1. 验证文件
+        // 1. 验证文件：大小限制（50MB）
         fileValidationService.validateFile(file, MAX_FILE_SIZE, "知识库");
 
         String fileName = file.getOriginalFilename();
@@ -64,7 +64,7 @@ public class KnowledgeBaseUploadService {
             return persistenceService.handleDuplicateKnowledgeBase(existingKb.get(), fileHash);
         }
 
-        // 4. 解析知识库文本（用于向量化）
+        // 4. 解析知识库文本（用于向量化）：使用 Apache Tika 提取文本
         String content = parseService.parseContent(file);
         if (content == null || content.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "无法从文件中提取文本内容，请确保文件格式正确");
@@ -75,7 +75,7 @@ public class KnowledgeBaseUploadService {
         String fileUrl = storageService.getFileUrl(fileKey);
         log.info("知识库已存储到RustFS: {}", fileKey);
 
-        // 6. 保存知识库元数据到数据库（状态为 PENDING）
+        // 6. 保存知识库元数据到PostgreSQL数据库（状态为 PENDING）
         KnowledgeBaseEntity savedKb = persistenceService.saveKnowledgeBase(file, name, category, fileKey, fileUrl, fileHash);
 
         // 7. 发送向量化任务到 Redis Stream（异步处理）

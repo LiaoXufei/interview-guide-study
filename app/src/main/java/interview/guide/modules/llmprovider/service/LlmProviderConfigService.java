@@ -64,7 +64,6 @@ public class LlmProviderConfigService {
   private final ApiKeyEncryptionService encryptionService;
   private final String yamlPath;
   private final String envPath;
-  // 所有读操作（list / get / test）走读锁，所有写操作（create / update / delete）走写锁。
   private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final VoiceInterviewProperties voiceProperties;
   private final QwenAsrService asrService;
@@ -109,9 +108,6 @@ public class LlmProviderConfigService {
     this(properties, registry, null, null, null, voiceProperties, asrService, ttsService);
   }
 
-  // config-yaml-path 默认指向 ${user.home}/.interview-guide/llm-providers.yml，绝不是源码里的 application.yml。
-  //这是为了避免运行时写操作污染 git 仓库。
-  // Spring Boot 通过 spring.config.import 机制把这个外部 YAML 合并进来
   @PostConstruct
   void validateWritablePaths() {
     ensureParentWritable(yamlPath, "config-yaml-path");
@@ -141,7 +137,6 @@ public class LlmProviderConfigService {
   }
 
   // ===== Read operations (read lock) =====
-  // rwLock.readLock().lock();
   public List<ProviderDTO> listProviders() {
     rwLock.readLock().lock();
     try {
@@ -320,7 +315,6 @@ public class LlmProviderConfigService {
   }
 
   // ===== Write operations (write lock) =====
-  // rwLock.writeLock().lock();
   @Transactional
   public void createProvider(CreateProviderRequest request) {
     rwLock.writeLock().lock();
@@ -365,11 +359,6 @@ public class LlmProviderConfigService {
     }
   }
 
-  /**
-   * 更新提供者 provider 
-   * @param id
-   * @param request
-   */
   @Transactional
   public void updateProvider(String id, UpdateProviderRequest request) {
     rwLock.writeLock().lock();
@@ -393,7 +382,6 @@ public class LlmProviderConfigService {
         throw new BusinessException(ErrorCode.BAD_REQUEST, "apiKey 不能为空字符串");
       }
 
-      // 字段更新
       if (trimmedBaseUrl != null) provider.setBaseUrl(trimmedBaseUrl);
       if (trimmedModel != null) provider.setModel(trimmedModel);
       if (request.embeddingModel() != null) {
@@ -420,7 +408,7 @@ public class LlmProviderConfigService {
       }
 
       providerRepository.save(provider);
-      registry.reload();  // 关键：清掉 Registry 内所有缓存
+      registry.reload();
       log.info("Updated provider: id={}", id);
     } finally {
       rwLock.writeLock().unlock();
@@ -775,14 +763,6 @@ public class LlmProviderConfigService {
     return normalized;
   }
 
-  /**
-   * 验证 embedding 配置
-   * 防止把聊天模型填写为 embedding 模型
-   * @param providerId
-   * @param supportsEmbedding
-   * @param embeddingModel
-   * @param embeddingDimensions
-   */
   private void validateEmbeddingConfig(
       String providerId,
       boolean supportsEmbedding,
@@ -792,15 +772,10 @@ public class LlmProviderConfigService {
     if (!supportsEmbedding) {
       return;
     }
-
-    // embeddingModel 不能为空
     if (normalizedModel == null) {
       throw new BusinessException(ErrorCode.BAD_REQUEST,
           "支持 Embedding 的 Provider 必须填写 embeddingModel");
     }
-
-    // embeddingModel 不能是聊天模型
-    // looksLikeChatModel()方法是一份已知聊天模型名前缀的黑名单
     if (looksLikeChatModel(normalizedModel)) {
       String recommendation = RECOMMENDED_EMBEDDING_MODELS.get(providerId.toLowerCase());
       String suffix = recommendation != null
@@ -809,8 +784,6 @@ public class LlmProviderConfigService {
       throw new BusinessException(ErrorCode.BAD_REQUEST,
           "Embedding Model 不能填写聊天模型 '" + normalizedModel + "'" + suffix);
     }
-
-    // embeddingDimensions 必须为正整数
     if (embeddingDimensions == null || embeddingDimensions <= 0) {
       throw new BusinessException(ErrorCode.BAD_REQUEST, "向量维度必须为正整数");
     }
@@ -926,13 +899,11 @@ public class LlmProviderConfigService {
   }
 
   // ===== YAML text editing (preserves comments & formatting) =====
-  // API Key 不直接写到 YAML，而是用 ${PROVIDER_DASHSCOPE_API_KEY} 占位符指向 .env 文件。
-  // 新增 Provider 时同步写 YAML 和 .env
   private void writeProviderToYaml(String id, ProviderConfig config, String envKey) {
     mutateYamlText(ErrorCode.PROVIDER_CONFIG_WRITE_FAILED, "写入 YAML 配置失败", editor -> {
       LinkedHashMap<String, Object> values = new LinkedHashMap<>();
       values.put("base-url", config.getBaseUrl());
-      values.put("api-key", "${" + envKey + "}"); // ← 占位符
+      values.put("api-key", "${" + envKey + "}");
       values.put("model", config.getModel());
       if (config.getEmbeddingModel() != null) {
         values.put("embedding-model", config.getEmbeddingModel());
@@ -1065,9 +1036,6 @@ public class LlmProviderConfigService {
   }
 
   // ===== YamlTextEditor: text-based YAML editing that preserves comments & formatting =====
-  // 基于文本行的 YAML 编辑器 YamlTextEditor
-  // 它的核心思想是：把 YAML 当文本处理，按缩进定位 key。
-  // 不解析整个语法树，而是按“缩进级别 + key 名”做行级查找替换。这样改一个字段，注释和格式完全不动。
   static class YamlTextEditor {
     private final List<String> lines;
 
@@ -1079,7 +1047,6 @@ public class LlmProviderConfigService {
       return lines;
     }
 
-    // 设置标量值
     void setScalar(String[] path, String value) {
       int searchFrom = path.length > 1
           ? ensureParents(Arrays.copyOf(path, path.length - 1))
@@ -1098,7 +1065,6 @@ public class LlmProviderConfigService {
       }
     }
 
-     // 写入嵌套块
     void setBlock(String[] parentPath, String blockKey, LinkedHashMap<String, Object> values) {
       int parentSearchFrom = ensureParents(parentPath);
       int blockIndent = parentPath.length * 2;
@@ -1126,7 +1092,6 @@ public class LlmProviderConfigService {
       }
     }
 
-    // 删除整个 section
     void removeSection(String[] parentPath, String sectionKey) {
       int parentSearchFrom = navigateTo(parentPath);
       if (parentSearchFrom < 0) return;
@@ -1176,9 +1141,6 @@ public class LlmProviderConfigService {
       return searchFrom;
     }
 
-    // 按“缩进级别 + key 名”做行级查找。
-    // 这种文本级编辑器对“非常规 YAML 写法”（比如锚点 &、引用 *、多行字符串 |）兼容性差。
-    // 但本项目的 YAML 配置都是标准的“key: value + 子块缩进”结构，这种简化反而带来了零依赖、零侵入的好处。
     private int findKey(String key, int indent, int searchFrom) {
       String prefix = " ".repeat(indent) + key + ":";
       for (int i = searchFrom; i < lines.size(); i++) {

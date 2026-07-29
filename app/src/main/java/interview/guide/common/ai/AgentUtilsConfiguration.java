@@ -26,7 +26,6 @@ public class AgentUtilsConfiguration {
         this.agentUtilsProperties = agentUtilsProperties;
     }
 
-    // 创建 SkillsTool
     @Bean("interviewSkillsToolCallback")
     public ToolCallback interviewSkillsToolCallback() {
         String configuredSkillsRoot = agentUtilsProperties.getSkillsRoot();

@@ -43,8 +43,6 @@ public class FileHashService {
      * @param data 字节数组
      * @return 十六进制哈希字符串
      */
-    // 一次性 digest.digest(data) 算哈希
-    // 简单；但要把整个文件载入内存，大文件不合适
     public String calculateHash(byte[] data) {
         try {
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
@@ -62,14 +60,11 @@ public class FileHashService {
      * @param inputStream 输入流
      * @return 十六进制哈希字符串
      */
-    // 流程：8KB 一块读 → digest.update() 累加 → 最后 digest() 出结果
-    // 特点：适合大文件；当前业务代码里还没用到，属于预留的通用能力
     public String calculateHash(InputStream inputStream) {
         try {
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
             byte[] buffer = new byte[BUFFER_SIZE];
             int bytesRead;
-            //从流读数据（磁盘、RustFS 下载流等），不必一次性读进内存
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 digest.update(buffer, 0, bytesRead);
             }

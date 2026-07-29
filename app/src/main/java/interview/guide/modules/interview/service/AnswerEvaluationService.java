@@ -47,25 +47,27 @@ public class AnswerEvaluationService {
         log.info("开始评估面试: {}, 共{}题", sessionId, questions.size());
 
         try {
-            // 转为通用问答记录：入参适配，把业务 DTO 转成通用 QaRecord 
+            // 转为通用问答记录
             List<QaRecord> qaRecords = questions.stream()
                 .map(q -> new QaRecord(q.questionIndex(), q.question(), q.category(), q.userAnswer()))
                 .toList();
 
-            // 拼装上下文 + 调用内核
-            String referenceContext = skillService.buildEvaluationReferenceSectionSafe(
-                persistenceService.findBySessionId(sessionId)
-                    .map(s -> s.getSkillId())
-                    .orElse(null)
-            );
+            String referenceContext = buildQuestionReferenceContext(questions);
+            if (referenceContext.isBlank()) {
+                referenceContext = skillService.buildEvaluationReferenceSectionSafe(
+                    persistenceService.findBySessionId(sessionId)
+                        .map(s -> s.getSkillId())
+                        .orElse(null)
+                );
+            }
 
             // 调用通用评估服务
             EvaluationReport report = unifiedEvaluationService.evaluate(
                 chatClient, sessionId, qaRecords, resumeText, referenceContext
             );
 
-            // 出参适配：转为文字面试专用 DTO,逐字段映射到 InterviewReportDTO
-            return toInterviewReportDTO(report);
+            // 转为文字面试专用 DTO
+            return withQuestionReferences(toInterviewReportDTO(report), questions);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -95,5 +97,72 @@ public class AnswerEvaluationService {
                     ra.referenceAnswer(), ra.keyPoints()))
                 .toList()
         );
+    }
+
+    private InterviewReportDTO withQuestionReferences(InterviewReportDTO report,
+                                                      List<InterviewQuestionDTO> questions) {
+        List<InterviewReportDTO.ReferenceAnswer> references = report.referenceAnswers().stream()
+            .map(reference -> {
+                InterviewQuestionDTO question = questions.stream()
+                    .filter(item -> item.questionIndex() == reference.questionIndex())
+                    .findFirst()
+                    .orElse(null);
+                if (question == null || question.referenceAnswer() == null
+                    || question.referenceAnswer().isBlank()) {
+                    return reference;
+                }
+                return new InterviewReportDTO.ReferenceAnswer(
+                    reference.questionIndex(),
+                    reference.question(),
+                    question.referenceAnswer(),
+                    question.keyPoints() != null ? question.keyPoints() : List.of()
+                );
+            })
+            .toList();
+        return new InterviewReportDTO(
+            report.sessionId(),
+            report.totalQuestions(),
+            report.overallScore(),
+            report.categoryScores(),
+            report.questionDetails(),
+            report.overallFeedback(),
+            report.strengths(),
+            report.improvements(),
+            references
+        );
+    }
+
+    private String buildQuestionReferenceContext(List<InterviewQuestionDTO> questions) {
+        StringBuilder sb = new StringBuilder();
+        for (InterviewQuestionDTO question : questions) {
+            if (!hasQuestionReference(question)) {
+                continue;
+            }
+            sb.append("问题").append(question.questionIndex() + 1).append(": ")
+                .append(question.question()).append('\n');
+            appendIfPresent(sb, "参考答案", question.referenceAnswer());
+            if (question.keyPoints() != null && !question.keyPoints().isEmpty()) {
+                sb.append("评分要点: ").append(String.join("；", question.keyPoints())).append('\n');
+            }
+            appendIfPresent(sb, "评分规则", question.scoringRubric());
+            sb.append('\n');
+        }
+        return sb.toString();
+    }
+
+    private boolean hasQuestionReference(InterviewQuestionDTO question) {
+        return hasText(question.referenceAnswer())
+            || hasText(question.scoringRubric())
+            || (question.keyPoints() != null && !question.keyPoints().isEmpty());
+    }
+
+    private void appendIfPresent(StringBuilder sb, String label, String value) {
+        if (hasText(value)) {
+            sb.append(label).append(": ").append(value.trim()).append('\n');
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

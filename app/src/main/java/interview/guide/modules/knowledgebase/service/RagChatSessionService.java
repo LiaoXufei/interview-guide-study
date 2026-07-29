@@ -31,6 +31,11 @@ import java.util.List;
 /**
  * RAG 聊天会话服务
  * 提供RAG聊天会话的创建、获取、更新、删除等操作
+ * 
+ *  ● 会话创建：关联多个知识库，支持多知识库联合问答
+ *  ● 消息顺序：使用 messageOrder 字段确保消息按顺序排列
+ *  ● 占位消息：在流式输出前创建空的 AI 消息占位，返回其 ID
+ *  ● 状态标记：completed 字段标记消息是否完成，前端可显示加载状态
  */
 @Slf4j
 @Service
@@ -111,6 +116,7 @@ public class RagChatSessionService {
      */
     @Transactional
     public Long prepareStreamMessage(Long sessionId, String question) {
+        // 1. 获取会话
         RagChatSessionEntity session = sessionRepository.findByIdWithKnowledgeBases(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "会话不存在"));
 
@@ -141,6 +147,7 @@ public class RagChatSessionService {
 
         log.info("准备流式消息: sessionId={}, messageId={}", sessionId, assistantMessage.getId());
 
+        // 返回 AI 消息 ID，供流式完成后更新
         return assistantMessage.getId();
     }
 

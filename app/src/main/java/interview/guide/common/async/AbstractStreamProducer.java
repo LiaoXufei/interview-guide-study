@@ -19,23 +19,21 @@ public abstract class AbstractStreamProducer<T> {
         this.redisService = redisService;
     }
 
-    /**
-     * 发送任务到Stream的基类方法
-     * @param payload
-     */
-    protected void sendTask(T payload) {
+    protected boolean sendTask(T payload) {
         try {
             String messageId = redisService.streamAdd(
                 streamKey(),
                 buildMessage(payload),
-                AsyncTaskStreamConstants.STREAM_MAX_LEN // 最多保留 1000 条，自动裁剪
+                AsyncTaskStreamConstants.STREAM_MAX_LEN
             );
             log.info("{}任务已发送到Stream: {}, messageId={}",
                 taskDisplayName(), payloadIdentifier(payload), messageId);
+            return true;
         } catch (Exception e) {
             log.error("发送{}任务失败: {}, error={}",
                 taskDisplayName(), payloadIdentifier(payload), e.getMessage(), e);
             onSendFailed(payload, "任务入队失败: " + e.getMessage());
+            return false;
         }
     }
 

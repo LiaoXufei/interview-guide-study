@@ -33,17 +33,11 @@ import java.util.UUID;
 /**
  * 文件存储服务
  */
-
-//将 S3 操作封装为统一的 FileStorageService，对上层业务屏蔽存储细节
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileStorageService {
 
-    //通过构造器注入 S3Client 和配置类: 
-    //类上有 @Service，Lombok 的 @RequiredArgsConstructor 会为所有 final 字段生成构造器；
-    // Spring 启动时会调用这个构造器，把 S3Client 和 StorageConfigProperties 传进来.
-    //从 Spring 4.3 起：如果一个 Bean 只有一个构造器，Spring 会自动用它做依赖注入，不必再写 @Autowired。
     private final S3Client s3Client;
     private final StorageConfigProperties storageConfig;
 
@@ -90,7 +84,6 @@ public class FileStorageService {
      * @param fileKey 文件存储键
      * @return 文件字节数组
      */
-    //返回比特数组的原因：方便支持多类型文件。
     public byte[] downloadFile(String fileKey) {
         if (!fileExists(fileKey)) {
             throw new BusinessException(ErrorCode.STORAGE_DOWNLOAD_FAILED, "文件不存在: " + fileKey);
@@ -108,7 +101,6 @@ public class FileStorageService {
         }
     }
 
-    // 日期路径格式
     private static final DateTimeFormatter DATE_PATH_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
     /**
@@ -183,7 +175,7 @@ public class FileStorageService {
             return;
         }
 
-        // 检查文件是否存在，避免不必要的删除操作`
+        // 检查文件是否存在，避免不必要的删除操作
         if (!fileExists(fileKey)) {
             log.warn("文件不存在，跳过删除: {}", fileKey);
             return;
@@ -219,7 +211,6 @@ public class FileStorageService {
         } catch (NoSuchBucketException e) {
             createBucket();
         } catch (S3Exception e) {
-            //应用启动时自动创建存储桶
             if (e.statusCode() == 404) {
                 createBucket();
                 return;
@@ -257,10 +248,6 @@ public class FileStorageService {
 
     /**
      * 生成文件键
-     * 格式: {prefix}/{yyyy/MM/dd}/{uuid}_{sanitized_filename}
-     * 示例: resumes/2026/01/02/a1b2c3d4_zhangsan_resume.pdf
-     * prefix分为 resumes 和 knowledgebases ，用来区分简历和知识库文件。
-     * uuid是随机生成的8位字符串，用来保证文件名唯一。
      */
     private String generateFileKey(String originalFilename, String prefix) {
         LocalDateTime now = LocalDateTime.now();
@@ -319,8 +306,10 @@ public class FileStorageService {
      * 处理单个字符，保留安全字符，其他替换为下划线
      */
     private char sanitizeChar(char ch) {
-        if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
-                || (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-') {
+        if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+            return ch;
+        }
+        if (ch == '.' || ch == '_' || ch == '-') {
             return ch;
         }
         return '_';

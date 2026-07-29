@@ -14,6 +14,10 @@ import java.util.regex.Pattern;
  * 仅用于 4 个严重风险的直接拼接点（裸拼接，无模板包裹）。
  * 模板插值点有 Layer 2 的系统提示词保护，不需要额外净化。
  * 用正则过滤四类高风险模式：1.行首角色标记（system:、user: 等）、2.注入短语（ignore previous instructions 等中英文变体）、3.模板分隔符伪造、4.XML 边界标签伪造
+ * Prompt 注入净化工具。
+ * <p>
+ * 仅用于 4 个严重风险的直接拼接点（裸拼接，无模板包裹）。
+ * 模板插值点有 Layer 2 的系统提示词保护，不需要额外净化。
  */
 @Component
 public class PromptSanitizer {
@@ -49,7 +53,7 @@ public class PromptSanitizer {
         "---(?:简历|文档|问答)内容(?:开始|结束)---"
     );
 
-    // 4.XML 边界标签伪造：防止攻击者构造 <data-boundary...> 来提前关闭包裹
+    // XML 边界标签伪造：防止攻击者构造 <data-boundary...> 来提前关闭包裹
     private static final Pattern BOUNDARY_TAG_PATTERN = Pattern.compile(
         "</?data-boundary[^>]*>", Pattern.CASE_INSENSITIVE
     );

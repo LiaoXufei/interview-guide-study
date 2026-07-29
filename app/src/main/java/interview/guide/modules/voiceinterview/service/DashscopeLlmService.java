@@ -44,7 +44,6 @@ public class DashscopeLlmService {
                 .user(promptContext.userPrompt())
                 .call();
 
-            // 直接取 getText()，要的是自由文本（语音要念出来的话），不是 JSON
             String content = response.chatResponse().getResult().getOutput().getText();
             String optimized = optimizeForVoice(content);
 

@@ -41,17 +41,23 @@ spring:
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:interview_guide}
     username: ${POSTGRES_USER:postgres}
-    # 与根目录 docker-compose.yml 中 postgres 服务默认一致（本地只起依赖容器 + bootRun 时无需改）
+    # 与 docker-compose.dev.yml 中 postgres 服务默认一致（本地只起依赖容器 + bootRun 时无需改）
     password: ${POSTGRES_PASSWORD:123456}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update #首次启动用 create，表创建成功后，改回 update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
 
   servlet:
     multipart:
@@ -76,7 +82,7 @@ spring:
   ai:
     # 禁用自动重试机制，让异常立即返回
     retry:
-      max-attempts: 1  # 不重试，失败立即返回。原因：Spring AI 的重试面向的是网络层失败（超时、5xx），而本项目要处理的是“调用成功但 JSON 解析失败”这类业务层问题。
+      max-attempts: 1  # 不重试，失败立即返回
       on-client-errors: false
     # PostgreSQL Vector Store配置
     vectorstore:
@@ -84,15 +90,14 @@ spring:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         dimensions: 1024  # text-embedding-v3实际生成的向量维度
-        initialize-schema: true # 开发环境设置为 true，方便快速启动。生产环境设置为 false，手动管理数据库 schema，避免意外变更。
+        initialize-schema: false # schema 统一由 Flyway 管理
         remove-existing-vector-store-table: false  # 保留现有表和数据
 
 # Application custom configuration
 app:
   ai:
-    # 使用openrouter作为embedding和chat功能的提供商
-    default-provider: openrouter  #默认提供商为dashscope
-    default-embedding-provider: openrouter  #默认嵌入提供商为dashscope
+    default-provider: dashscope
+    default-embedding-provider: dashscope
     embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
     security:
       api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}
@@ -105,15 +110,6 @@ app:
     agent-utils:
       skills-root: ${APP_AI_AGENT_UTILS_SKILLS_ROOT:classpath:skills}
     providers:
-      # 新增供应商openrouter
-      openrouter:
-        base-url: https://openrouter.ai/api/v1
-        api-key: ${PROVIDER_OPENROUTER_API_KEY:}
-        model: ${PROVIDER_OPENROUTER_CHAT_MODEL:nvidia/nemotron-3-ultra-550b-a55b:free}
-        embedding-model: nvidia/llama-nemotron-embed-vl-1b-v2:free
-        embedding-dimensions: 1024
-        supports-embedding: true
-        temperature: 0.7
       dashscope:
         base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
         api-key: ${AI_BAILIAN_API_KEY}
@@ -155,7 +151,6 @@ app:
       message-chat-memory-enabled: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_ENABLED:false}
       message-chat-memory-max-messages: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_MAX_MESSAGES:120}
       simple-logger-enabled: ${APP_AI_ADVISORS_SIMPLE_LOGGER_ENABLED:false}
-    ## 修复型重试的任务配置
     # 结构化输出重试次数（用于 BeanOutputConverter 解析失败时的业务层重试）
     structured-max-attempts: ${APP_AI_STRUCTURED_MAX_ATTEMPTS:2}
     # 重试时是否将上次错误原因注入提示词，帮助模型定向修复输出
@@ -285,6 +280,8 @@ app:
     tts-timeout-seconds: ${APP_VOICE_TTS_TIMEOUT_SECONDS:8}
     # 单会话并发 TTS 上限，控制首段语音速度和服务连接压力
     max-concurrent-tts-per-session: ${APP_VOICE_MAX_CONCURRENT_TTS_PER_SESSION:3}
+    # 是否在应用启动时为开场白预热音频缓存；默认关闭，避免启动时产生云端 TTS 调用
+    opening-audio-warmup-enabled: ${APP_VOICE_OPENING_AUDIO_WARMUP_ENABLED:false}
 
     # Rate limiting
     rate-limit:

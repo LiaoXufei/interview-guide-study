@@ -47,17 +47,10 @@ public class ResumeController {
      * @return 简历分析结果，包含评分和建议
      */
     @PostMapping(value = "/api/resumes/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    // @RateLimit 注解用于限制接口的请求频率，防止频繁操作或恶意攻击。
-    // 下面两个注解分别限制了全局（所有用户合计）和单个IP地址每分钟最多只能上传5次简历文件。
-    // 如果超出限制，将自动阻止请求并返回频率限制提示。
     @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
-    // @RateLimit 是项目自定义的可重复注解，
-    // 默认时间窗口 1 秒，全局每秒最多 5 次、单 IP 每秒最多 5 次，防止批量上传拖垮服务。
-    // 重复简历的响应里带 "duplicate": true，前端据此展示不同的提示信息。
     public Result<Map<String, Object>> uploadAndAnalyze(@RequestParam("file") MultipartFile file) {
         Map<String, Object> result = uploadService.uploadAndAnalyze(file);
-        //isDuplicate 判断区分首次上传和重复命中
         boolean isDuplicate = (Boolean) result.get("duplicate");
         if (isDuplicate) {
             return Result.success("检测到相同简历，已返回历史分析结果", result);

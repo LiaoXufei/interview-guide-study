@@ -17,6 +17,12 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
 
+<<<<<<< HEAD
+=======
+  flyway:
+    enabled: false
+
+>>>>>>> upstream/master
   redis:
     redisson:
       config: |

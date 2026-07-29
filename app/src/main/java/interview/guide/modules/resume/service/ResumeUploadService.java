@@ -37,7 +37,6 @@ public class ResumeUploadService {
     private final ResumeRepository resumeRepository;
     private final TransactionalExecutor transactionalExecutor;
 
-    //设置最大文件大小为10MB
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
     /**
@@ -47,7 +46,6 @@ public class ResumeUploadService {
      * @return 上传结果（分析将异步进行）
      */
     public Map<String, Object> uploadAndAnalyze(org.springframework.web.multipart.MultipartFile file) {
-        //记录开始时间用来计算处理时间
         long startTime = System.currentTimeMillis();
 
         // 1. 验证文件
@@ -71,9 +69,6 @@ public class ResumeUploadService {
         }
 
         // 4. 解析简历文本
-        // todo: 实际解析在 ResumeParseService → DocumentParseService，底层是 Apache Tika
-        // 较稳妥的是 「先 Tika，失败再 OCR」 的策略，而不是替换 Tika
-        // 可以考虑其他的OCR服务方案进行项目的提升
         long parseStart = System.currentTimeMillis();
         String resumeText = parseService.parseResume(file);
         if (resumeText == null || resumeText.trim().isEmpty()) {
@@ -82,16 +77,14 @@ public class ResumeUploadService {
         log.info("简历文本解析完成: {} - 解析耗时: {}ms, 文本长度: {} 字符",
             fileName, System.currentTimeMillis() - parseStart, resumeText.length());
 
-        // 5. 保存简历文件到 RustFS（分布式对象存储，适合存放大文件/二进制）
+        // 5. 保存简历到RustFS
         long storageStart = System.currentTimeMillis();
-        String fileKey = storageService.uploadResume(file); // 上传文件到 RustFS，返回存储 key
-        String fileUrl = storageService.getFileUrl(fileKey); // 获取文件访问 URL
+        String fileKey = storageService.uploadResume(file);
+        String fileUrl = storageService.getFileUrl(fileKey);
         log.info("简历已存储到RustFS: {} - 存储耗时: {}ms",
             fileKey, System.currentTimeMillis() - storageStart);
 
-        // 6. 保存简历元数据到数据库（只存元信息，不存大文件，方便检索与分析流程状态追踪）
-        // 数据库用于存储结构化信息，如简历解析的文本内容、分析状态、文件在对象存储中的key和URL等
-        // RustFS 只做文件存储，数据库负责业务与检索，两者之间没有直接同步关系，只通过 fileKey/url 关联
+        // 6. 保存简历到数据库（状态为 PENDING）
         ResumeEntity savedResume = persistenceService.saveResume(file, resumeText, fileKey, fileUrl);
 
         // 7. 发送分析任务到 Redis Stream（异步处理）

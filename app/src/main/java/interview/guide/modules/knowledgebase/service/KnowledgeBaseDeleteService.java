@@ -20,7 +20,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor    //使用 Lombok 的注解，自动为本类所有 final 字段生成包含这些字段的构造方法。
+@RequiredArgsConstructor
 public class KnowledgeBaseDeleteService {
     
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -32,16 +32,12 @@ public class KnowledgeBaseDeleteService {
     /**
      * 删除知识库
      * 包括：RAG会话关联、向量数据、RustFS文件、数据库记录
-     * 删除顺序：RAG会话关联 → 向量数据 → RustFS文件 → 数据库记录
      */
     public void deleteKnowledgeBase(Long id) {
-        // 删除知识库记录，删除成功则返回存储 key
         String storageKey = transactionalExecutor.call(() -> deleteKnowledgeBaseRecords(id));
 
-        // 删除知识库的向量数据
         vectorService.deleteByKnowledgeBaseId(id);
 
-        // 删除存储文件
         try {
             storageService.deleteKnowledgeBase(storageKey);
         } catch (Exception e) {
@@ -54,7 +50,6 @@ public class KnowledgeBaseDeleteService {
         log.info("知识库已删除: id={}", id);
     }
 
-    // 删除知识库记录，删除成功则返回存储 key
     private String deleteKnowledgeBaseRecords(Long id) {
         // 1. 获取知识库信息
         KnowledgeBaseEntity kb = knowledgeBaseRepository.findById(id)

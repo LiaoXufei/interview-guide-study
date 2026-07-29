@@ -112,9 +112,6 @@ public class InterviewQuestionService {
         return new PromptTemplate(loader.getResource(location).getContentAsString(StandardCharsets.UTF_8));
     }
 
-    /**
-     * 销毁执行器
-     */
     @PreDestroy
     void destroy() {
         questionExecutor.shutdownNow();
@@ -148,13 +145,11 @@ public class InterviewQuestionService {
         log.info("并行出题: skill={}, total={}, resumeCount={}, directionCount={}",
             skillId, questionCount, resumeCount, directionCount);
 
-        // 调用虚拟线程并行生成简历题
         CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
             () -> generateResumeQuestions(questionChatClient, resumeText, resumeCount, skill,
                 difficultyDesc, historicalSection),
             questionExecutor);
 
-        // 调用虚拟线程并行生成方向题
         CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
             () -> generateDirectionOnly(questionChatClient, skill, difficultyDesc, directionCount,
                 historicalSection),
@@ -192,9 +187,6 @@ public class InterviewQuestionService {
         return merged;
     }
 
-    /**
-     * 生成简历题
-    */
     private List<InterviewQuestionDTO> generateResumeQuestions(
             ChatClient questionClient, String resumeText, int questionCount,
             SkillDTO skill, String difficultyDesc, String historicalSection) {
@@ -231,15 +223,6 @@ public class InterviewQuestionService {
         }
     }
 
-    /**
-     * 生成方向题
-     * @param questionClient
-     * @param skill
-     * @param difficultyDesc
-     * @param questionCount
-     * @param historicalSection
-     * @return
-     */
     private List<InterviewQuestionDTO> generateDirectionOnly(
             ChatClient questionClient, SkillDTO skill, String difficultyDesc,
             int questionCount, String historicalSection) {
@@ -261,7 +244,6 @@ public class InterviewQuestionService {
             variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
             variables.put("jdSection", buildJdSection(skill.sourceJd()));
 
-            // 把 skill.persona() 直接拼到 system prompt 末尾
             String systemPrompt = skillSystemPromptTemplate.render()
                 + buildSkillPersonaSection(skill)
                 + GENERIC_MODE_SYSTEM_APPEND
@@ -453,11 +435,6 @@ public class InterviewQuestionService {
             promptSanitizer.wrapWithDelimiters("jd", promptSanitizer.sanitize(sourceJd));
     }
 
-    /**
-     * 把 skill.persona() 拼进 system prompt 末尾，并加上说明和安全包裹
-     * @param skill
-     * @return
-     */
     private String buildSkillPersonaSection(SkillDTO skill) {
         if (skill == null || skill.persona() == null || skill.persona().isBlank()) {
             return "";

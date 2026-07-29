@@ -60,8 +60,8 @@ public class InterviewController {
      * 创建面试会话
      */
     @PostMapping("/api/interview/sessions")
-    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)   // 限制整个系统或该接口在特定时间窗口内（例如每秒）的总请求数最多为 5 次。
-    @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)       // 限制同一个客户端 IP 地址在特定时间窗口内的请求数最多为 5 次。
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
     public Result<InterviewSessionDTO> createSession(@RequestBody CreateInterviewRequest request) {
         log.info("创建面试会话，题目数量: {}", request.questionCount());
         InterviewSessionDTO session = sessionService.createSession(request);

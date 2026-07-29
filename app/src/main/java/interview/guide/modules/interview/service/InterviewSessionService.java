@@ -91,6 +91,8 @@ public class InterviewSessionService {
             sessionId,
             request.resumeText() != null ? request.resumeText() : "",
             request.resumeId(),
+            null,
+            null,
             questions,
             0,
             SessionStatus.CREATED
@@ -110,7 +112,38 @@ public class InterviewSessionService {
             questions.size(),
             0,
             questions,
-            SessionStatus.CREATED
+            SessionStatus.CREATED,
+            null,
+            null
+        );
+    }
+
+    public InterviewSessionDTO createSessionFromQuestions(List<InterviewQuestionDTO> questions,
+                                                          String llmProvider,
+                                                          String skillId,
+                                                          String difficulty,
+                                                          Long knowledgeBaseId,
+                                                          String interviewCategory) {
+        if (questions == null || questions.isEmpty()) {
+            throw new BusinessException(ErrorCode.INTERVIEW_QUESTION_NOT_FOUND, "面试题目不能为空");
+        }
+
+        String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        persistenceService.saveSession(
+            sessionId, null, questions.size(), questions, llmProvider, skillId, difficulty,
+            "KNOWLEDGE_BASE", knowledgeBaseId, interviewCategory);
+        sessionCache.saveSession(sessionId, "", null, knowledgeBaseId, interviewCategory,
+            questions, 0, SessionStatus.CREATED);
+
+        return new InterviewSessionDTO(
+            sessionId,
+            "",
+            questions.size(),
+            0,
+            questions,
+            SessionStatus.CREATED,
+            knowledgeBaseId,
+            interviewCategory
         );
     }
 
@@ -188,7 +221,7 @@ public class InterviewSessionService {
     }
 
     /**
-     * 从 session 聚合实体恢复会话并缓存到 Redis
+     * 从实体恢复会话并缓存到 Redis
      */
     private CachedSession restoreSessionFromEntity(InterviewSessionEntity entity) {
         try {
@@ -198,7 +231,7 @@ public class InterviewSessionService {
                 new TypeReference<>() {}
             );
 
-            // 恢复已保存的答案，
+            // 恢复已保存的答案
             List<InterviewAnswerEntity> answers = persistenceService.findAnswersBySessionId(entity.getSessionId());
             for (InterviewAnswerEntity answer : answers) {
                 int index = answer.getQuestionIndex();
@@ -210,11 +243,13 @@ public class InterviewSessionService {
 
             SessionStatus status = convertStatus(entity.getStatus());
 
-            // 保存到 Redis 缓存，Redis 里存的是整包会话状态，需要从 DB 聚合后再写入。
+            // 保存到 Redis 缓存
             sessionCache.saveSession(
                 entity.getSessionId(),
                 entity.getResume() != null ? entity.getResume().getResumeText() : "",
                 entity.getResume() != null ? entity.getResume().getId() : null,
+                entity.getKnowledgeBaseId(),
+                entity.getInterviewCategory(),
                 questions,
                 entity.getCurrentQuestionIndex(),
                 status
@@ -268,7 +303,7 @@ public class InterviewSessionService {
             return null; // 所有问题已回答完
         }
 
-        // 更新状态为进行中，CREATED → IN_PROGRESS（原状态必须是 CREATED)
+        // 更新状态为进行中
         if (session.getStatus() == SessionStatus.CREATED) {
             session.setStatus(SessionStatus.IN_PROGRESS);
             sessionCache.updateSessionStatus(sessionId, SessionStatus.IN_PROGRESS);
@@ -310,7 +345,6 @@ public class InterviewSessionService {
         boolean hasNextQuestion = newIndex < questions.size();
         InterviewQuestionDTO nextQuestion = hasNextQuestion ? questions.get(newIndex) : null;
 
-        // IN_PROGRESS → COMPLETED（答完最后一题自动转）
         SessionStatus newStatus = hasNextQuestion ? SessionStatus.IN_PROGRESS : SessionStatus.COMPLETED;
 
         persistSubmittedAnswer(request, index, question, newIndex, newStatus);
@@ -334,19 +368,11 @@ public class InterviewSessionService {
         );
     }
 
-    /**
-     * 保存提交的答案
-     * @param request
-     * @param index
-     * @param question
-     * @param newIndex
-     * @param newStatus
-     */
     private void persistSubmittedAnswer(SubmitAnswerRequest request, int index,
                                         InterviewQuestionDTO question, int newIndex,
                                         SessionStatus newStatus) {
         try {
-            persistenceService.saveAnswer(  // 保存答案到数据库,每提交一题，往 interview_answers 写/更新
+            persistenceService.saveAnswer(
                 request.sessionId(), index,
                 question.question(), question.category(),
                 request.answer(), 0, null  // 分数在报告生成时更新
@@ -419,7 +445,6 @@ public class InterviewSessionService {
     public void completeInterview(String sessionId) {
         CachedSession session = getOrRestoreSession(sessionId);
 
-        // 已 COMPLETED/EVALUATED 不能再交卷，任意非终态 禁止→ COMPLETED
         if (session.getStatus() == SessionStatus.COMPLETED || session.getStatus() == SessionStatus.EVALUATED) {
             throw new BusinessException(ErrorCode.INTERVIEW_ALREADY_COMPLETED);
         }
@@ -430,8 +455,9 @@ public class InterviewSessionService {
         // 更新数据库状态
         try {
             persistenceService.updateSessionStatus(sessionId,
-                InterviewSessionEntity.SessionStatus.COMPLETED);     // 改 Redis 缓存状态为 COMPLETED
-            persistenceService.updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);// 改 Redis 缓存状态为 PENDING
+                InterviewSessionEntity.SessionStatus.COMPLETED);
+            // 设置评估状态为 PENDING
+            persistenceService.updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);
         } catch (Exception e) {
             log.warn("更新会话状态失败: {}", e.getMessage());
         }
@@ -469,7 +495,6 @@ public class InterviewSessionService {
     public InterviewReportDTO generateReport(String sessionId) {
         CachedSession session = getOrRestoreSession(sessionId);
 
-        // COMPLETED/EVALUATED → EVALUATED（原状态必须是完成态）
         if (session.getStatus() != SessionStatus.COMPLETED && session.getStatus() != SessionStatus.EVALUATED) {
             throw new BusinessException(ErrorCode.INTERVIEW_NOT_COMPLETED, "面试尚未完成，无法生成报告");
         }
@@ -517,7 +542,9 @@ public class InterviewSessionService {
             questions.size(),
             session.getCurrentIndex(),
             questions,
-            session.getStatus()
+            session.getStatus(),
+            session.getKnowledgeBaseId(),
+            session.getInterviewCategory()
         );
     }
 }

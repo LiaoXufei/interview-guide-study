@@ -91,7 +91,7 @@ public class KnowledgeBaseVectorService {
                 int end = Math.min(start + MAX_BATCH_SIZE, totalChunks);
                 List<Document> batch = chunks.subList(start, end);
                 log.debug("处理第 {}/{} 批: chunks {}-{}", i + 1, batchCount, start + 1, end);
-                vectorStore.add(batch);  // 调用 Embedding API 并存储到 pgvector
+                vectorStore.add(batch);
             }
             activateVectorJob(knowledgeBaseId, jobId);
             log.info("知识库向量化完成: kbId={}, jobId={}, chunks={}, batches={}",
@@ -135,12 +135,10 @@ public class KnowledgeBaseVectorService {
                 builder.similarityThreshold(minScore);
             }
 
-            // 元数据过滤：支持按知识库 ID 过滤，实现多知识库联合检索或单独检索
             if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
                 builder.filterExpression(buildKbFilterExpression(knowledgeBaseIds));
             }
 
-            // 向量相似度检索：使用 Spring AI 的 VectorStore 进行语义检索
             List<Document> results = vectorStore.similaritySearch(builder.build());
             if (results == null) {
                 return List.of();

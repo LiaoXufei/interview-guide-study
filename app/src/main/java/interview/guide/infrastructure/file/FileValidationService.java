@@ -21,7 +21,7 @@ public class FileValidationService {
      * 验证文件基本属性（是否为空、文件大小）
      *
      * @param file 上传的文件
-     * @param maxSizeBytes 最大文件大小（字节），设置为10MB
+     * @param maxSizeBytes 最大文件大小（字节）
      * @param fileTypeName 文件类型名称（用于错误消息，如"简历"、"知识库"）
      */
     public void validateFile(MultipartFile file, long maxSizeBytes, String fileTypeName) {

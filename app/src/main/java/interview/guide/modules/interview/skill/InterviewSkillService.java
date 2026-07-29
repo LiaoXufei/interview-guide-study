@@ -249,9 +249,6 @@ public class InterviewSkillService {
         return calculateAllocation(getSkill(skillId).categories(), totalQuestions);
     }
 
-    /**
-     * 不同的重要等级的题目数量
-     */
     public Map<String, Integer> calculateAllocation(List<SkillCategoryDTO> categories, int totalQuestions) {
         List<SkillCategoryDTO> alwaysOneCats = new ArrayList<>();
         List<SkillCategoryDTO> coreCats = new ArrayList<>();
@@ -350,17 +347,16 @@ public class InterviewSkillService {
 
     /**
      * 安全版本的评估参考基线：skillId 为空或加载失败时返回空字符串，不抛异常。
-     * 评估阶段实际调用的入口（两个评估服务都调它），它包了一层吞异常逻辑
      */
     public String buildEvaluationReferenceSectionSafe(String skillId) {
         if (skillId == null || skillId.isBlank()) {
-            return "";   // 兜底 1：无 skillId，直接返回空串
+            return "";
         }
         try {
             return buildEvaluationReferenceSection(skillId);
         } catch (Exception e) {
             log.warn("加载评估参考基线失败，降级为无参考: skillId={}, error={}", skillId, e.getMessage());
-            return "";  // 兜底 2：加载异常，catch 后返回空串，只打 warn 日志，不向上抛
+            return "";
         }
     }
 
@@ -370,16 +366,13 @@ public class InterviewSkillService {
         StringBuilder sb = new StringBuilder();
 
         for (SkillCategoryDTO category : skill.categories()) {
-            // 1、分类过滤 —— 谓词 categoryFilter.test(category) 不通过就 continue，由调用方决定覆盖范围。
             if (!categoryFilter.test(category)) {
                 continue;
             }
-            //2、ref 为空跳过，某个分类没配置 reference 就跳过，不报错。
             if (category.ref() == null || category.ref().isBlank()) {
                 continue;
             }
 
-            // 3、custom 模式（用户自定义 skill）下，非 shared 的 reference 可能继承自某个内置 skill，要查 categoryRefIndex 映射拿到真正的 sourceSkillId 来拼路径。
             // custom 模式下非 shared 的 ref 需要查原始 skillId 拼路径
             String effectiveSkillId = skill.id();
             if (CUSTOM_SKILL_ID.equals(skill.id()) && !category.shared() && category.ref() != null) {
@@ -399,7 +392,6 @@ public class InterviewSkillService {
             sb.append("### ").append(category.label()).append(" (").append(category.key()).append(")\n");
             sb.append(referenceContent);
 
-            // 4、截断：一旦累计长度达到 maxChars 就硬截断并 break，不再加载后续分类。这是 token 防爆的关键
             if (sb.length() >= maxChars) {
                 sb.setLength(maxChars);
                 sb.append("\n...（references 已截断）");
@@ -407,7 +399,6 @@ public class InterviewSkillService {
             }
         }
 
-        // 最后如果所有分类都没注入内容，返回 "未配置 references."（L402），而不是空串
         return sb.isEmpty() ? "未配置 references。" : sb.toString();
     }
 

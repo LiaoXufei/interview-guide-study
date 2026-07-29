@@ -20,7 +20,6 @@ import java.util.Map;
 public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamProducer.AnalyzeTaskPayload> {
 
     private final ResumeRepository resumeRepository;
-    // 事务执行器
     private final TransactionalExecutor transactionalExecutor;
 
     record AnalyzeTaskPayload(Long resumeId, String content) {}
@@ -35,7 +34,7 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         this.transactionalExecutor = transactionalExecutor;
     }
 
-    /***
+    /**
      * 发送分析任务到 Redis Stream
      *
      * @param resumeId 简历ID
@@ -50,13 +49,11 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         return "分析";
     }
 
-    //定义 Stream
     @Override
     protected String streamKey() {
         return AsyncTaskStreamConstants.RESUME_ANALYZE_STREAM_KEY;
     }
 
-    //定义消息体，消息是 KV 结构，包含resumeId、content（简历全文）、retryCount（初始为 0）。
     @Override
     protected Map<String, String> buildMessage(AnalyzeTaskPayload payload) {
         return Map.of(
@@ -71,9 +68,6 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
         return "resumeId=" + payload.resumeId();
     }
 
-    /**
-     * 若 Redis 不可用，生产者会把简历状态标为 FAILED（独立事务，避免和主事务纠缠）
-     */
     @Override
     protected void onSendFailed(AnalyzeTaskPayload payload, String error) {
         transactionalExecutor.runRequiresNew(

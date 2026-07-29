@@ -2,7 +2,7 @@
 
 **智能 AI 面试官平台** - 基于大语言模型的简历分析、模拟面试和 RAG 知识库系统
 
-[![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-green?logo=springboot)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-18.3-blue?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -16,7 +16,7 @@
 
 ## 项目介绍
 
-InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音）、面试安排、知识库管理和多模型配置的智能面试辅助平台。系统利用大语言模型（LLM）、向量数据库、Redis Stream 异步任务和实时语音技术，为求职者、HR 和培训机构提供智能化的简历评估、面试练习、知识库问答和面试日程管理能力。
+InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音）、面试安排、知识库管理、知识库题库面试和多模型配置的智能面试辅助平台。系统利用大语言模型（LLM）、向量数据库、Redis Stream 异步任务和实时语音技术，为求职者、HR 和培训机构提供智能化的简历评估、面试练习、知识库问答和面试日程管理能力。
 
 ## 系统架构
 
@@ -37,7 +37,7 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 | 技术                  | 版本  | 说明                          |
 | --------------------- | ----- | ----------------------------- |
 | Spring Boot           | 4.1.0 | 应用框架                      |
-| Java                  | 21    | 开发语言（虚拟线程）          |
+| Java                  | 25    | 开发语言（虚拟线程）          |
 | Spring AI             | 2.0.0 | AI 集成框架、OpenAI 兼容模型接入 |
 | Spring AI Agent Utils | 0.10.0 | Skill 资源加载、Advisor 能力扩展 |
 | PostgreSQL + pgvector | 14+   | 关系数据库 + 向量存储（Compose 默认 PG16） |
@@ -49,7 +49,7 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 | DashScope SDK         | 2.22.7 | 语音识别/合成（Qwen3 ASR/TTS）|
 | AWS S3 SDK            | 2.29.51 | S3 兼容对象存储（MinIO/RustFS）|
 | WebSocket             | -     | 语音面试实时双向通信          |
-| Gradle                | 8.14  | 构建工具                      |
+| Gradle                | 9.6.1 | 构建工具                      |
 
 技术选型常见问题解答：
 
@@ -121,6 +121,15 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 - **智能问答对话**：支持会话管理、置顶、多知识库关联、Markdown 展示和虚拟列表渲染。
 - **知识库运维**：支持分类管理、下载、重新向量化、搜索和统计信息展示。
 
+### 知识库题库与面试模块
+
+- **基于知识库生成题目**：从已向量化文档生成主问题、参考答案、关键点、评分标准和追问，并按方向与难度组织题库。
+- **异步生成与质量提示**：题目生成任务通过 Redis Stream 异步执行；生成不足时保留草稿，并展示实际追问数与目标追问数，避免静默丢失题目。
+- **完整题库维护**：支持题目搜索、筛选、分页、手动新增、编辑、删除，以及草稿、已启用、已归档状态的单题或批量管理。
+- **严格面试容量校验**：开始面试前按方向、难度、主问题数和每题追问数实时计算可用容量；追问数量是硬约束，容量不足的选项会直接禁用，后端同时进行兜底校验。
+- **知识库专项面试**：从已启用题目中抽取主问题和追问，完整记录作答过程，并复用统一评估引擎异步生成总分、逐题评价、优势和改进建议。
+- **评估与记录闭环**：交卷后展示评估进度，完成后自动进入本次面试详情；支持方向、时间、完成状态筛选、表现趋势统计和 PDF 报告导出。
+
 ### 多模型与系统设置模块
 
 - **多 Provider 管理**：内置 DashScope、LM Studio、Kimi、DeepSeek、GLM 等 OpenAI 兼容 Provider 配置。
@@ -148,7 +157,7 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 - [x] 多 LLM Provider 管理与默认模型切换
 - [x] RAG 聊天会话管理 + 虚拟列表优化
 - [x] 可重复注解 API 限流（Global/IP/User 维度）
-- [ ] 打通模拟面试和知识库
+- [x] 打通知识库题库与模拟面试（异步出题、严格容量校验、统一评估与记录）
 - [ ] 语音面试接入 WebRTC 降低延迟
 - [ ] 语音面试支持更多 TTS 音色
 
@@ -267,7 +276,7 @@ interview-guide/
 
 | 依赖          | 版本 | 必需 | 说明                                     |
 | ------------- | ---- | ---- | ---------------------------------------- |
-| JDK           | 21+  | 是   | 开发语言                                 |
+| JDK           | 25   | 是   | 开发语言                                 |
 | Node.js       | 18+  | 是   | 前端构建                                 |
 | pnpm          | 10+  | 推荐 | 前端包管理器（项目 packageManager 指定 10.26）|
 | Docker        | -    | 推荐 | 一键启动依赖服务（PostgreSQL/Redis/RustFS）|
@@ -318,6 +327,25 @@ docker compose -f docker-compose.dev.yml down
 
 # 停止并清除数据
 docker compose -f docker-compose.dev.yml down -v
+```
+
+如果你之前已经启动过旧版本容器，拉取新代码后建议确认端口映射是否真的生效：
+
+```bash
+docker ps --format '{{.Names}} {{.Ports}}'
+```
+
+正常情况下应看到：
+
+```text
+interview-postgres 0.0.0.0:5432->5432/tcp
+interview-redis    0.0.0.0:6379->6379/tcp
+```
+
+如果只看到 `interview-postgres 5432/tcp` 或 `interview-redis 6379/tcp`，说明容器内部服务是启动的，但端口没有发布到宿主机。此时通过 `./gradlew :app:bootRun` 从宿主机启动后端，会出现类似 `Connection to localhost:5432 refused` 的报错。可以重建容器配置（不会删除 Docker volume 中的数据）：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --force-recreate postgres redis
 ```
 
 启动后默认账号：
@@ -440,13 +468,13 @@ docker image prune -f
 
 ### Q: 数据库表创建失败/数据丢失
 
-检查 JPA 的 `ddl-auto` 配置。`ddl-auto` 模式对比：
+本地开发首先检查 JPA 的 `ddl-auto` 配置。`ddl-auto` 模式对比：
 
 | 模式     | 行为                            | 适用场景      | 数据保留 |
 | -------- | ------------------------------- | ------------- | -------- |
-| **update** | 智能模式：表不存在自动创建，存在则增量更新 | **开发环境（推荐）** | ✅ 保留 |
+| update   | 表不存在自动创建，存在则尝试增量更新 | 早期开发或临时实验，当前项目不推荐 | ✅ 保留 |
 | create   | 无条件删除并重建所有表          | 仅首次建表时使用 | ❌ 删除 |
-| validate | 只验证，不修改                  | 生产环境      | ✅ 保留 |
+| **validate** | 只验证，不修改                  | **当前项目默认推荐，建表和变更交给 Flyway** | ✅ 保留 |
 | none     | 什么都不做                      | 生产环境      | ✅ 保留 |
 
 **推荐配置（已默认）**：
@@ -454,25 +482,48 @@ docker image prune -f
 ```yaml
 jpa:
   hibernate:
-    ddl-auto: update  # 首次启动自动创建表，后续保留数据并增量更新
+    ddl-auto: validate  # 只校验 schema，建表和变更交给 Flyway
 ```
 
 ⚠️ **注意**：避免使用 `create` 模式，否则每次重启都会删除所有数据！
 
 ### Q: 知识库向量化失败
 
-当 `initialize-schema: false` 时，Spring AI **不会自动创建** `vector_store` 表。
+`vector_store` 表已由 Flyway 创建，Spring AI 不再自动建表。
 
 ```java
 spring:
   ai:
     vectorstore:
       pgvector:
-        initialize-schema: true 
+        initialize-schema: false
 
 ```
 
-建议开发环境设置为 true，方便快速启动。生产环境设置为 false，手动管理数据库 schema，避免意外变更。
+建议保持为 false，避免应用启动时绕过 Flyway 修改数据库 schema。
+
+### Q: 数据库迁移需要手动执行脚本吗？
+
+不需要。数据库 schema 已接入 Flyway，后端应用启动时会自动执行 `app/src/main/resources/db/migration/` 下的迁移，并记录到 `flyway_schema_history`。
+
+当前项目通过 `V1__init_schema.sql` 支持空库初始化，后续版本通过增量迁移演进；Hibernate `ddl-auto` 只做 `validate` 校验。测试环境使用 H2，默认关闭 Flyway。
+
+### Q: 启动时报 `Connection to localhost:5432 refused` 怎么办？
+
+这通常不是 Flyway 脚本错误，而是后端从宿主机访问不到 PostgreSQL。先确认依赖容器已启动：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+docker ps --format '{{.Names}} {{.Ports}}'
+```
+
+`interview-postgres` 必须显示 `0.0.0.0:5432->5432/tcp`，`interview-redis` 必须显示 `0.0.0.0:6379->6379/tcp`。如果只显示 `5432/tcp` 或 `6379/tcp`，说明旧容器没有应用端口映射配置，重建容器即可：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --force-recreate postgres redis
+```
+
+如果你的本机 `5432` 或 `6379` 已被其他项目占用，可以修改 `.env` 中的 `POSTGRES_PORT` / `REDIS_PORT`，并同步调整 `docker-compose.dev.yml` 里的端口映射，确保应用配置和容器发布端口一致。
 
 ### Q: 简历分析失败
 

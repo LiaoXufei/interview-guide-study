@@ -25,7 +25,6 @@ public class ApiKeyEncryptionService {
       "interview-guide-dev-only-provider-api-key-encryption";
 
   private final LlmProviderProperties properties;
-  // 每次加密都用 SecureRandom 生成 12 字节随机 Nonce
   private final SecureRandom secureRandom = new SecureRandom();
   private SecretKeySpec secretKey;
 
@@ -33,58 +32,36 @@ public class ApiKeyEncryptionService {
     this.properties = properties;
   }
 
-  /**
-   * 初始化密钥,应用启动时执行一次
-   * 决定用什么密钥 → 把密钥变成 AES 可用的格式。
-   */
   @PostConstruct
   void init() {
     String configuredKey = resolveConfiguredKey(properties.getSecurity());
     secretKey = new SecretKeySpec(resolveKeyBytes(configuredKey), "AES");
   }
-  
-  /**
-   * 获取配置的密钥
-   * 
-   * 只要在 application.yml 里把 require-encryption-key: true 打开，没配真实密钥直接启动失败
-   * @param security
-   * @return
-   */
+
   private String resolveConfiguredKey(LlmProviderProperties.SecurityConfig security) {
-    // 如果 security 有配真实密钥，直接使用真实密钥
     String configuredKey = security != null ? security.getApiKeyEncryptionKey() : null;
     if (configuredKey != null && !configuredKey.isBlank()) {
       return configuredKey;
     }
 
-    // 是否强制要求密钥
     boolean requireEncryptionKey = security == null || security.isRequireEncryptionKey();
     if (requireEncryptionKey) {
       throw new BusinessException(ErrorCode.PROVIDER_CONFIG_READ_FAILED,
           "APP_AI_CONFIG_ENCRYPTION_KEY 未配置，无法初始化 Provider API Key 加密");
     }
 
-    // 是否允许使用 fallback 兜底密钥
     boolean allowFallback = security != null && security.isAllowFallbackEncryptionKey();
     if (!allowFallback) {
       throw new BusinessException(ErrorCode.PROVIDER_CONFIG_READ_FAILED,
           "APP_AI_CONFIG_ENCRYPTION_KEY 未配置，且未显式允许 Provider API Key 开发 fallback");
     }
 
-    // 使用 fallback 兜底密钥
     log.warn("APP_AI_CONFIG_ENCRYPTION_KEY is not configured; using explicitly enabled fallback key");
     return DEV_FALLBACK_KEY;
   }
 
-  /**
-   * 加密 Provider API Key
-   *  
-   * @param plainText
-   * @return
-   */
   public EncryptedValue encrypt(String plainText) {
     try {
-      //每次加密都用 SecureRandom 生成 12 字节随机 Nonce
       byte[] nonce = new byte[NONCE_BYTES];
       secureRandom.nextBytes(nonce);
 
@@ -117,23 +94,17 @@ public class ApiKeyEncryptionService {
     }
   }
 
-  /**
-   * 密钥转换成 AES 可用的格式
-   * 
-   * @param configuredKey
-   * @return
-   */
   private byte[] resolveKeyBytes(String configuredKey) {
     String trimmed = configuredKey.trim();
     try {
       byte[] decoded = Base64.getDecoder().decode(trimmed);
       if (decoded.length == 32) {
-        return decoded;  // 你直接传了 32 字节 Base64 编码的 AES-256 密钥
+        return decoded;
       }
     } catch (IllegalArgumentException ignored) {
-      // 不是合法 Base64？降级走 SHA-256 派生
+      // Fall through to SHA-256 derivation for human-readable keys.
     }
-    return sha256(trimmed); // 你传了"interview-guide-prod-2025"这种人类可读字符串
+    return sha256(trimmed);
   }
 
   private byte[] sha256(String value) {

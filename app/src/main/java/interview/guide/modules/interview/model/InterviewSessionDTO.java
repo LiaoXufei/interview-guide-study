@@ -11,9 +11,10 @@ public record InterviewSessionDTO(
     int totalQuestions,
     int currentQuestionIndex,
     List<InterviewQuestionDTO> questions,
-    SessionStatus status
+    SessionStatus status,
+    Long knowledgeBaseId,
+    String interviewCategory
 ) {
-    // 文字面试用 SessionStatus 四态（CREATED → IN_PROGRESS → COMPLETED → EVALUATED）
     public enum SessionStatus {
         CREATED,      // 会话已创建
         IN_PROGRESS,  // 面试进行中
